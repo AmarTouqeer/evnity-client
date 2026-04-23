@@ -22,7 +22,7 @@ const Bookings = () => {
   const [filterStatus, setFilterStatus] = useState("all");
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
-
+  const [cancellingId, setCancellingId] = useState(null);
   // Fetch bookings from API
   useEffect(() => {
     fetchBookings();
@@ -42,6 +42,24 @@ const Bookings = () => {
     }
   };
 
+  const handleCancelBooking = async (bookingId) => {
+    const reason = prompt("Please enter a reason for cancellation (optional):");
+    if (reason === null) return; // user pressed Cancel on the prompt
+
+    try {
+      setCancellingId(bookingId);
+      const response = await bookingAPI.cancel(bookingId, { reason });
+      if (!response || response.success === false) {
+        throw new Error(response?.message || "Failed to cancel booking");
+      }
+      await fetchBookings(); // refresh the list
+    } catch (err) {
+      console.error("Error cancelling booking:", err);
+      alert(err.message || "Failed to cancel booking. Please try again.");
+    } finally {
+      setCancellingId(null);
+    }
+  };
   // Sample bookings data (keeping as fallback/reference)
   const sampleBookings = [
     {
@@ -224,8 +242,8 @@ const Bookings = () => {
         booking.paymentStatus === "paid"
           ? "Paid"
           : booking.paymentStatus === "partial"
-          ? "Partial"
-          : "Pending",
+            ? "Partial"
+            : "Pending",
       receiptUploaded: booking.receipt?.url ? true : false,
       guestCount: booking.quantity,
       rentalPeriod:
@@ -322,41 +340,37 @@ const Bookings = () => {
               <div className="flex gap-2">
                 <button
                   onClick={() => setActiveTab("all")}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                    activeTab === "all"
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === "all"
                       ? "bg-[#D7490C] text-white"
                       : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
+                    }`}
                 >
                   All
                 </button>
                 <button
                   onClick={() => setActiveTab("events")}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                    activeTab === "events"
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === "events"
                       ? "bg-[#D7490C] text-white"
                       : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
+                    }`}
                 >
                   Events
                 </button>
                 <button
                   onClick={() => setActiveTab("services")}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                    activeTab === "services"
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === "services"
                       ? "bg-[#D7490C] text-white"
                       : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
+                    }`}
                 >
                   Services
                 </button>
                 <button
                   onClick={() => setActiveTab("resources")}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                    activeTab === "resources"
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === "resources"
                       ? "bg-[#D7490C] text-white"
                       : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
+                    }`}
                 >
                   Resources
                 </button>
@@ -526,10 +540,24 @@ const Bookings = () => {
                         </button>
                       )} */}
 
-                    {booking.status === "Pending" && (
-                      <button className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
-                        <XCircle className="w-4 h-4" />
-                        Cancel Booking
+                    {(booking.status === "Pending" || booking.status === "Accepted") && (
+                      <button
+                        type="button"
+                        onClick={() => handleCancelBooking(booking.id)}
+                        disabled={cancellingId === booking.id}
+                        className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {cancellingId === booking.id ? (
+                          <>
+                            <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            Cancelling...
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="w-4 h-4" />
+                            Cancel Booking
+                          </>
+                        )}
                       </button>
                     )}
 

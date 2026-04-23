@@ -536,7 +536,7 @@ const AdminDashboard = () => {
 
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Statistics Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           <div className="bg-white rounded-xl shadow-lg p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="p-3 bg-blue-100 rounded-lg">
@@ -582,7 +582,7 @@ const AdminDashboard = () => {
             <div className="text-sm text-gray-600">Services & Resources</div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-lg p-6">
+          {/* <div className="bg-white rounded-xl shadow-lg p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="p-3 bg-red-100 rounded-lg">
                 <AlertCircle className="w-6 h-6 text-red-600" />
@@ -592,8 +592,8 @@ const AdminDashboard = () => {
             <div className="text-2xl font-bold text-gray-900 mb-1">
               {stats.activeComplaints}
             </div>
-            <div className="text-sm text-gray-600">Active Complaints</div>
-          </div>
+            <div className="text-sm text-gray-600">Active Complants</div>
+          </div> */}
         </div>
 
         {/* Additional Stats */}

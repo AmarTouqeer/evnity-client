@@ -353,7 +353,7 @@ const Resources = () => {
           </div>
 
           {/* Availability */}
-          <select
+          {/* <select
             name="availability"
             value={filters.availability}
             onChange={handleFilterChange}
@@ -362,7 +362,7 @@ const Resources = () => {
             <option value="">All Availability</option>
             <option value="Available">Available (10+)</option>
             <option value="Limited">Limited Stock (1-10)</option>
-          </select>
+          </select> */}
 
           <button
             onClick={() => setShowFilters((s) => !s)}
