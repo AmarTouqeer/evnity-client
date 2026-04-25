@@ -597,7 +597,7 @@ const AdminDashboard = () => {
         </div>
 
         {/* Additional Stats */}
-        <div className="bg-white rounded-xl shadow-lg p-6">
+        <div className="bg-white rounded-xl shadow-lg p-6 mb-7">
           <div className="flex items-center">
             <div className="p-3 bg-green-100 rounded-lg mr-4">
               <DollarSign className="w-8 h-8 text-green-600" />

@@ -8,7 +8,7 @@ import {
   uploadAPI,
   providerStripeAPI,
 } from "../services/api";
-import { getCityCoordinates,getCityNames,pakistanCities } from "../components/CitiesList";
+import { getCityCoordinates, getCityNames, pakistanCities } from "../components/CitiesList";
 
 const AddListing = () => {
   const navigate = useNavigate();
@@ -21,6 +21,7 @@ const AddListing = () => {
   const [stripeStatus, setStripeStatus] = useState(null);
   const [stripeStatusLoading, setStripeStatusLoading] = useState(false);
   const [stripeStatusError, setStripeStatusError] = useState(null);
+  const [availableDates, setAvailableDates] = useState([]);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -50,10 +51,10 @@ const AddListing = () => {
 
   const filteredCities = citySearch
     ? pakistanCities.filter(
-        (city) =>
-          city.name.toLowerCase().includes(citySearch.toLowerCase()) ||
-          city.province.toLowerCase().includes(citySearch.toLowerCase())
-      )
+      (city) =>
+        city.name.toLowerCase().includes(citySearch.toLowerCase()) ||
+        city.province.toLowerCase().includes(citySearch.toLowerCase())
+    )
     : pakistanCities;
 
   useEffect(() => {
@@ -90,9 +91,9 @@ const AddListing = () => {
     fetchStripeStatus();
   }, []);
 
-  const eventCategories = ["Wedding","Birthday","Corporate","Religious","Cultural","Sports","Music","Other"];
-  const serviceCategories = ["Photography","Videography","Catering","DJ","Entertainment","Planning","Decorator","Makeup","Other"];
-  const resourceCategories = ["Furniture","Equipment","Decoration","Lighting","Sound","Catering","Tent","Other"];
+  const eventCategories = ["Wedding", "Birthday", "Corporate", "Religious", "Cultural", "Sports", "Music", "Other"];
+  const serviceCategories = ["Photography", "Videography", "Catering", "DJ", "Entertainment", "Planning", "Decorator", "Makeup", "Other"];
+  const resourceCategories = ["Furniture", "Equipment", "Decoration", "Lighting", "Sound", "Catering", "Tent", "Other"];
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -141,37 +142,37 @@ const AddListing = () => {
   };
 
   const handleConnectStripe = async () => {
-  try {
-    setStripeStatusLoading(true);
-    const response = await providerStripeAPI.getConnectUrl();
+    try {
+      setStripeStatusLoading(true);
+      const response = await providerStripeAPI.getConnectUrl();
 
-    // ✅ If already connected, just refresh stripe status instead
-    if (response?.data?.isConnected) {
-      const statusResponse = await providerStripeAPI.getStatus();
-      if (statusResponse.success) {
-        setStripeStatus(statusResponse.data);
+      // ✅ If already connected, just refresh stripe status instead
+      if (response?.data?.isConnected) {
+        const statusResponse = await providerStripeAPI.getStatus();
+        if (statusResponse.success) {
+          setStripeStatus(statusResponse.data);
+        }
+        alert("Your Stripe account is already connected!");
+        return;
       }
-      alert("Your Stripe account is already connected!");
-      return;
-    }
 
-    if (!response || response.success === false) {
-      throw new Error(response?.message || "Failed to start Stripe Connect onboarding.");
-    }
+      if (!response || response.success === false) {
+        throw new Error(response?.message || "Failed to start Stripe Connect onboarding.");
+      }
 
-    const url = response.data?.authUrl;
-    if (!url) {
-      throw new Error("Stripe Connect URL was not returned by the server.");
-    }
+      const url = response.data?.authUrl;
+      if (!url) {
+        throw new Error("Stripe Connect URL was not returned by the server.");
+      }
 
-    window.location.href = url;
-  } catch (error) {
-    console.error("Error starting Stripe Connect onboarding:", error);
-    alert(error.message || "Failed to start Stripe Connect onboarding.");
-  } finally {
-    setStripeStatusLoading(false);
-  }
-};
+      window.location.href = url;
+    } catch (error) {
+      console.error("Error starting Stripe Connect onboarding:", error);
+      alert(error.message || "Failed to start Stripe Connect onboarding.");
+    } finally {
+      setStripeStatusLoading(false);
+    }
+  };
 
   const canUseStripePayments =
     stripeStatus?.isConnected &&
@@ -222,6 +223,64 @@ const AddListing = () => {
         methods: prev.manual.methods.filter((_, i) => i !== index),
       },
     }));
+  };
+
+  // ── Available Dates ──────────────────────────────────────────
+  const addAvailableDate = () => {
+    setAvailableDates((prev) => [
+      ...prev,
+      {
+        date: "",
+        timeSlots: [{ startTime: "08:00", endTime: "22:00", isAvailable: true }],
+      },
+    ]);
+  };
+
+  const removeAvailableDate = (dateIdx) => {
+    setAvailableDates((prev) => prev.filter((_, i) => i !== dateIdx));
+  };
+
+  const updateAvailableDate = (dateIdx, value) => {
+    setAvailableDates((prev) => {
+      const updated = [...prev];
+      updated[dateIdx] = { ...updated[dateIdx], date: value };
+      return updated;
+    });
+  };
+
+  const addTimeSlot = (dateIdx) => {
+    setAvailableDates((prev) => {
+      const updated = [...prev];
+      updated[dateIdx] = {
+        ...updated[dateIdx],
+        timeSlots: [
+          ...updated[dateIdx].timeSlots,
+          { startTime: "08:00", endTime: "22:00", isAvailable: true },
+        ],
+      };
+      return updated;
+    });
+  };
+
+  const removeTimeSlot = (dateIdx, slotIdx) => {
+    setAvailableDates((prev) => {
+      const updated = [...prev];
+      updated[dateIdx] = {
+        ...updated[dateIdx],
+        timeSlots: updated[dateIdx].timeSlots.filter((_, i) => i !== slotIdx),
+      };
+      return updated;
+    });
+  };
+
+  const updateTimeSlot = (dateIdx, slotIdx, field, value) => {
+    setAvailableDates((prev) => {
+      const updated = [...prev];
+      const slots = [...updated[dateIdx].timeSlots];
+      slots[slotIdx] = { ...slots[slotIdx], [field]: value };
+      updated[dateIdx] = { ...updated[dateIdx], timeSlots: slots };
+      return updated;
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -275,6 +334,7 @@ const AddListing = () => {
           capacity: Number(formData.capacity),
           images: uploadedImages.map((img) => ({ url: img.url, publicId: img.publicId })),
           paymentOptions,
+          availableDates,
         };
         response = await eventAPI.create(eventData);
 
@@ -354,25 +414,22 @@ const AddListing = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <button
               onClick={() => setListingType("event")}
-              className={`p-4 border-2 rounded-lg font-semibold transition-all ${
-                listingType === "event" ? "border-[#D7490C] bg-orange-50 text-[#D7490C]" : "border-gray-300 hover:border-gray-400"
-              }`}
+              className={`p-4 border-2 rounded-lg font-semibold transition-all ${listingType === "event" ? "border-[#D7490C] bg-orange-50 text-[#D7490C]" : "border-gray-300 hover:border-gray-400"
+                }`}
             >
               Event Venue
             </button>
             <button
               onClick={() => setListingType("service")}
-              className={`p-4 border-2 rounded-lg font-semibold transition-all ${
-                listingType === "service" ? "border-[#D7490C] bg-orange-50 text-[#D7490C]" : "border-gray-300 hover:border-gray-400"
-              }`}
+              className={`p-4 border-2 rounded-lg font-semibold transition-all ${listingType === "service" ? "border-[#D7490C] bg-orange-50 text-[#D7490C]" : "border-gray-300 hover:border-gray-400"
+                }`}
             >
               Service
             </button>
             <button
               onClick={() => setListingType("resource")}
-              className={`p-4 border-2 rounded-lg font-semibold transition-all ${
-                listingType === "resource" ? "border-[#D7490C] bg-orange-50 text-[#D7490C]" : "border-gray-300 hover:border-gray-400"
-              }`}
+              className={`p-4 border-2 rounded-lg font-semibold transition-all ${listingType === "resource" ? "border-[#D7490C] bg-orange-50 text-[#D7490C]" : "border-gray-300 hover:border-gray-400"
+                }`}
             >
               Resource
             </button>
@@ -491,6 +548,140 @@ const AddListing = () => {
                   placeholder="e.g., 123 Main Street, Block A, DHA Phase 5"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
                 />
+              </div>
+            )}
+
+            {/* Available Dates — event only */}
+            {listingType === "event" && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-700">
+                      Available Dates &amp; Time Slots
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Add the dates your venue is available for booking.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addAvailableDate}
+                    className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-full border border-[#D7490C] text-[#D7490C] hover:bg-orange-50 transition-colors"
+                  >
+                    <Plus className="w-3 h-3" />
+                    Add Date
+                  </button>
+                </div>
+
+                {availableDates.length === 0 && (
+                  <p className="text-xs text-gray-400 italic">
+                    No dates added yet. Click <span className="font-semibold">Add Date</span> to get started.
+                  </p>
+                )}
+
+                {availableDates.map((entry, dateIdx) => (
+                  <div
+                    key={dateIdx}
+                    className="border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50"
+                  >
+                    {/* Date row */}
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Date <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          value={entry.date}
+                          min={new Date().toISOString().split("T")[0]}
+                          onChange={(e) => updateAvailableDate(dateIdx, e.target.value)}
+                          required
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeAvailableDate(dateIdx)}
+                        className="mt-5 p-1.5 text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Time slots */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-medium text-gray-600">Time Slots</p>
+                        <button
+                          type="button"
+                          onClick={() => addTimeSlot(dateIdx)}
+                          className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full border border-gray-400 text-gray-600 hover:bg-gray-100 transition-colors"
+                        >
+                          <Plus className="w-3 h-3" />
+                          Add Slot
+                        </button>
+                      </div>
+
+                      {entry.timeSlots.map((slot, slotIdx) => (
+                        <div
+                          key={slotIdx}
+                          className="flex flex-wrap items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2"
+                        >
+                          {/* Start time */}
+                          <div className="flex items-center gap-1">
+                            <label className="text-[11px] text-gray-500">From</label>
+                            <input
+                              type="time"
+                              value={slot.startTime}
+                              onChange={(e) =>
+                                updateTimeSlot(dateIdx, slotIdx, "startTime", e.target.value)
+                              }
+                              className="px-2 py-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-[#D7490C] focus:border-transparent"
+                            />
+                          </div>
+
+                          {/* End time */}
+                          <div className="flex items-center gap-1">
+                            <label className="text-[11px] text-gray-500">To</label>
+                            <input
+                              type="time"
+                              value={slot.endTime}
+                              onChange={(e) =>
+                                updateTimeSlot(dateIdx, slotIdx, "endTime", e.target.value)
+                              }
+                              className="px-2 py-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-[#D7490C] focus:border-transparent"
+                            />
+                          </div>
+
+                          {/* Available toggle */}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateTimeSlot(dateIdx, slotIdx, "isAvailable", !slot.isAvailable)
+                            }
+                            className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${slot.isAvailable
+                                ? "border-green-500 text-green-700 bg-green-50"
+                                : "border-gray-300 text-gray-500 bg-gray-50"
+                              }`}
+                          >
+                            {slot.isAvailable ? "Available" : "Unavailable"}
+                          </button>
+
+                          {/* Remove slot */}
+                          {entry.timeSlots.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeTimeSlot(dateIdx, slotIdx)}
+                              className="ml-auto p-1 text-red-400 hover:bg-red-50 rounded-full transition-colors"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -642,18 +833,16 @@ const AddListing = () => {
                       type="button"
                       onClick={handleStripeToggle}
                       disabled={!canUseStripePayments}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        !canUseStripePayments
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${!canUseStripePayments
                           ? "bg-gray-300 opacity-50 cursor-not-allowed"
                           : paymentOptions.stripe.enabled
-                          ? "bg-green-500"
-                          : "bg-gray-300"
-                      }`}
+                            ? "bg-green-500"
+                            : "bg-gray-300"
+                        }`}
                     >
                       <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          paymentOptions.stripe.enabled ? "translate-x-6" : "translate-x-1"
-                        }`}
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${paymentOptions.stripe.enabled ? "translate-x-6" : "translate-x-1"
+                          }`}
                       />
                     </button>
                   </div>
@@ -668,9 +857,8 @@ const AddListing = () => {
                         value={paymentOptions.stripe.currency.toUpperCase()}
                         onChange={handleStripeCurrencyChange}
                         disabled={!canUseStripePayments}
-                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D7490C] focus:border-transparent ${
-                          !canUseStripePayments ? "bg-gray-100" : ""
-                        }`}
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D7490C] focus:border-transparent ${!canUseStripePayments ? "bg-gray-100" : ""
+                          }`}
                         placeholder="USD"
                       />
                       <p className="text-[11px] text-gray-500 mt-1">
@@ -714,14 +902,12 @@ const AddListing = () => {
                     <button
                       type="button"
                       onClick={handleManualToggle}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        paymentOptions.manual.enabled ? "bg-green-500" : "bg-gray-300"
-                      }`}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${paymentOptions.manual.enabled ? "bg-green-500" : "bg-gray-300"
+                        }`}
                     >
                       <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          paymentOptions.manual.enabled ? "translate-x-6" : "translate-x-1"
-                        }`}
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${paymentOptions.manual.enabled ? "translate-x-6" : "translate-x-1"
+                          }`}
                       />
                     </button>
                   </div>
@@ -778,11 +964,10 @@ const AddListing = () => {
                               <button
                                 type="button"
                                 onClick={() => updateManualMethod(index, "isActive", !method.isActive)}
-                                className={`text-xs px-3 py-1 rounded-full border ${
-                                  method.isActive
+                                className={`text-xs px-3 py-1 rounded-full border ${method.isActive
                                     ? "border-green-500 text-green-700 bg-green-50"
                                     : "border-gray-300 text-gray-600 bg-gray-50"
-                                }`}
+                                  }`}
                               >
                                 {method.isActive ? "Active" : "Inactive"}
                               </button>

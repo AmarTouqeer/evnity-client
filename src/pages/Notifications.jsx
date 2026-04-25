@@ -214,7 +214,7 @@ const Notifications = () => {
 
                               {notification.actionUrl && (
                                 <a
-                                  href={notification.actionUrl}
+                                   href={notification.actionUrl.replace("/admin/events/", "/events/")}
                                   className="px-3 py-1 text-sm bg-[#D7490C] text-white rounded-lg hover:bg-[#B7410E] transition-colors"
                                 >
                                   View
