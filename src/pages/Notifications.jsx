@@ -1,124 +1,67 @@
-import { useState } from "react";
 import {
   Bell,
   Check,
   Trash2,
   Calendar,
   DollarSign,
-  MessageCircle,
   AlertCircle,
+  Settings,
+  Star,
+  Loader2,
 } from "lucide-react";
+import { useNotifications, formatTime } from "../context/notification-context";
 
+/* ─────────────────────────────────────────────
+   Icon + colour map (presentation only)
+───────────────────────────────────────────── */
+const TYPE_CONFIG = {
+  booking_created:          { Icon: Calendar,    color: "bg-blue-100 text-blue-600" },
+  booking_accepted:         { Icon: Calendar,    color: "bg-blue-100 text-blue-600" },
+  booking_rejected:         { Icon: Calendar,    color: "bg-blue-100 text-blue-600" },
+  booking_confirmed:        { Icon: Calendar,    color: "bg-blue-100 text-blue-600" },
+  booking_cancelled:        { Icon: Calendar,    color: "bg-blue-100 text-blue-600" },
+  booking_completed:        { Icon: Calendar,    color: "bg-blue-100 text-blue-600" },
+  payment_received:         { Icon: DollarSign,  color: "bg-green-100 text-green-600" },
+  payment_confirmed:        { Icon: DollarSign,  color: "bg-green-100 text-green-600" },
+  payment_failed:           { Icon: DollarSign,  color: "bg-red-100 text-red-600" },
+  review_received:          { Icon: Star,        color: "bg-yellow-100 text-yellow-600" },
+  admin_approval:           { Icon: Settings,    color: "bg-purple-100 text-purple-600" },
+  admin_rejection:          { Icon: Settings,    color: "bg-purple-100 text-purple-600" },
+  event_approved:           { Icon: Settings,    color: "bg-purple-100 text-purple-600" },
+  event_rejected:           { Icon: Settings,    color: "bg-purple-100 text-purple-600" },
+  resource_approved:        { Icon: Settings,    color: "bg-purple-100 text-purple-600" },
+  resource_rejected:        { Icon: Settings,    color: "bg-purple-100 text-purple-600" },
+  service_approved:         { Icon: Settings,    color: "bg-purple-100 text-purple-600" },
+  service_rejected:         { Icon: Settings,    color: "bg-purple-100 text-purple-600" },
+  resource_return_reminder: { Icon: AlertCircle, color: "bg-orange-100 text-orange-600" },
+  stripe_connected:         { Icon: DollarSign,  color: "bg-green-100 text-green-600" },
+  stripe_disconnected:      { Icon: DollarSign,  color: "bg-red-100 text-red-600" },
+  general:                  { Icon: Bell,        color: "bg-gray-100 text-gray-600" },
+};
+
+/* ─────────────────────────────────────────────
+   Component
+───────────────────────────────────────────── */
 const Notifications = () => {
-  const [filter, setFilter] = useState("all");
-
-  const [notifications, setNotifications] = useState([
-    {
-      id: 1,
-      type: "booking",
-      icon: Calendar,
-      title: "Booking Confirmed",
-      message:
-        "Your booking for Grand Wedding Hall has been confirmed by the provider.",
-      time: "2 hours ago",
-      unread: true,
-      link: "/bookings",
-    },
-    {
-      id: 2,
-      type: "payment",
-      icon: DollarSign,
-      title: "Payment Verified",
-      message:
-        "Your payment receipt has been verified by admin. Booking is now active.",
-      time: "5 hours ago",
-      unread: true,
-      link: "/bookings",
-    },
-    {
-      id: 3,
-      type: "message",
-      icon: MessageCircle,
-      title: "New Message from Provider",
-      message: "Elite Events sent you a message regarding your upcoming event.",
-      time: "1 day ago",
-      unread: false,
-      link: "/messages",
-    },
-    {
-      id: 4,
-      type: "booking",
-      icon: Calendar,
-      title: "Booking Request Pending",
-      message:
-        "Your booking request for Professional Photography is awaiting provider approval.",
-      time: "1 day ago",
-      unread: false,
-      link: "/bookings",
-    },
-    {
-      id: 5,
-      type: "complaint",
-      icon: AlertCircle,
-      title: "Complaint Update",
-      message:
-        "Admin has responded to your complaint #C001. View the response.",
-      time: "2 days ago",
-      unread: false,
-      link: "/complaints",
-    },
-    {
-      id: 6,
-      type: "payment",
-      icon: DollarSign,
-      title: "Receipt Upload Reminder",
-      message: "Don't forget to upload your payment receipt for booking #B002.",
-      time: "3 days ago",
-      unread: false,
-      link: "/bookings/2/upload-receipt",
-    },
-  ]);
-
-  const filteredNotifications = notifications.filter((notification) => {
-    if (filter === "all") return true;
-    if (filter === "unread") return notification.unread;
-    return notification.type === filter;
-  });
-
-  const markAsRead = (id) => {
-    setNotifications(
-      notifications.map((n) => (n.id === id ? { ...n, unread: false } : n))
-    );
-  };
-
-  const markAllAsRead = () => {
-    setNotifications(notifications.map((n) => ({ ...n, unread: false })));
-  };
-
-  const deleteNotification = (id) => {
-    setNotifications(notifications.filter((n) => n.id !== id));
-  };
-
-  const unreadCount = notifications.filter((n) => n.unread).length;
-
-  const getTypeColor = (type) => {
-    switch (type) {
-      case "booking":
-        return "bg-blue-100 text-blue-600";
-      case "payment":
-        return "bg-green-100 text-green-600";
-      case "message":
-        return "bg-purple-100 text-purple-600";
-      case "complaint":
-        return "bg-red-100 text-red-600";
-      default:
-        return "bg-gray-100 text-gray-600";
-    }
-  };
+  const {
+    filteredNotifications,
+    unreadCount,
+    loading,
+    error,
+    currentPage,
+    totalPages,
+    filter,
+    setFilter,
+    filters,          // role-specific tab list from context
+    markAsRead,
+    markAllAsRead,
+    deleteNotification,
+    fetchNotifications,
+  } = useNotifications();
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
+      {/* ── Header ── */}
       <div className="bg-gradient-to-r from-[#B7410E] to-[#D7490C] text-white">
         <div className="max-w-7xl mx-auto px-6 py-8">
           <div className="flex items-center justify-between">
@@ -129,6 +72,7 @@ const Notifications = () => {
                 {unreadCount !== 1 ? "s" : ""}
               </p>
             </div>
+
             {unreadCount > 0 && (
               <button
                 onClick={markAllAsRead}
@@ -142,157 +86,174 @@ const Notifications = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Filters */}
+        {/* ── Role-specific Filters ── */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
           <div className="flex flex-wrap gap-3">
-            <button
-              onClick={() => setFilter("all")}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                filter === "all"
-                  ? "bg-[#D7490C] text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              All ({notifications.length})
-            </button>
-            <button
-              onClick={() => setFilter("unread")}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                filter === "unread"
-                  ? "bg-[#D7490C] text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Unread ({unreadCount})
-            </button>
-            <button
-              onClick={() => setFilter("booking")}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                filter === "booking"
-                  ? "bg-[#D7490C] text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Bookings
-            </button>
-            <button
-              onClick={() => setFilter("payment")}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                filter === "payment"
-                  ? "bg-[#D7490C] text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Payments
-            </button>
-            <button
-              onClick={() => setFilter("message")}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                filter === "message"
-                  ? "bg-[#D7490C] text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Messages
-            </button>
-            <button
-              onClick={() => setFilter("complaint")}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                filter === "complaint"
-                  ? "bg-[#D7490C] text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Complaints
-            </button>
+            {filters.map(({ key, label }) => {
+              const count =
+                key === "all"
+                  ? filteredNotifications.length
+                  : key === "unread"
+                  ? unreadCount
+                  : null;
+
+              return (
+                <button
+                  key={key}
+                  onClick={() => {
+                    setFilter(key);
+                    fetchNotifications(1);
+                  }}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    filter === key
+                      ? "bg-[#D7490C] text-white"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  {label}
+                  {count !== null ? ` (${count})` : ""}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* Notifications List */}
-        <div className="space-y-4">
-          {filteredNotifications.length === 0 ? (
-            <div className="bg-white rounded-xl shadow-lg p-12 text-center">
-              <Bell className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-gray-900 mb-2">
-                No notifications
-              </h3>
-              <p className="text-gray-600">You're all caught up!</p>
-            </div>
-          ) : (
-            filteredNotifications.map((notification) => {
-              const Icon = notification.icon;
-              return (
-                <div
-                  key={notification.id}
-                  className={`bg-white rounded-xl shadow-lg overflow-hidden transition-all hover:shadow-xl ${
-                    notification.unread ? "border-l-4 border-[#D7490C]" : ""
-                  }`}
-                >
-                  <div className="p-6">
-                    <div className="flex items-start gap-4">
-                      {/* Icon */}
-                      <div
-                        className={`p-3 rounded-lg ${getTypeColor(
-                          notification.type
-                        )}`}
-                      >
-                        <Icon className="w-6 h-6" />
-                      </div>
+        {/* ── Loading ── */}
+        {loading && (
+          <div className="flex justify-center items-center py-20">
+            <Loader2 className="w-8 h-8 text-[#D7490C] animate-spin" />
+          </div>
+        )}
 
-                      {/* Content */}
-                      <div className="flex-1">
-                        <div className="flex items-start justify-between mb-2">
-                          <h3 className="text-lg font-bold text-gray-900">
-                            {notification.title}
-                          </h3>
-                          {notification.unread && (
-                            <span className="h-3 w-3 bg-[#D7490C] rounded-full"></span>
-                          )}
+        {/* ── Error ── */}
+        {!loading && error && (
+          <div className="bg-white rounded-xl shadow-lg p-12 text-center">
+            <AlertCircle className="w-16 h-16 text-red-400 mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-gray-900 mb-2">
+              Something went wrong
+            </h3>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <button
+              onClick={() => fetchNotifications(currentPage)}
+              className="px-4 py-2 bg-[#D7490C] text-white rounded-lg hover:bg-[#B7410E] transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* ── Notifications List ── */}
+        {!loading && !error && (
+          <div className="space-y-4">
+            {filteredNotifications.length === 0 ? (
+              <div className="bg-white rounded-xl shadow-lg p-12 text-center">
+                <Bell className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-xl font-bold text-gray-900 mb-2">
+                  No notifications
+                </h3>
+                <p className="text-gray-600">You're all caught up!</p>
+              </div>
+            ) : (
+              filteredNotifications.map((notification) => {
+                const { Icon, color } =
+                  TYPE_CONFIG[notification.type] ?? TYPE_CONFIG.general;
+                const isUnread = !notification.isRead;
+
+                return (
+                  <div
+                    key={notification._id}
+                    className={`bg-white rounded-xl shadow-lg overflow-hidden transition-all hover:shadow-xl ${
+                      isUnread ? "border-l-4 border-[#D7490C]" : ""
+                    }`}
+                  >
+                    <div className="p-6">
+                      <div className="flex items-start gap-4">
+                        {/* Icon */}
+                        <div className={`p-3 rounded-lg ${color}`}>
+                          <Icon className="w-6 h-6" />
                         </div>
-                        <p className="text-gray-700 mb-3">
-                          {notification.message}
-                        </p>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-500">
-                            {notification.time}
-                          </span>
-                          <div className="flex gap-2">
-                            {notification.unread && (
+
+                        {/* Content */}
+                        <div className="flex-1">
+                          <div className="flex items-start justify-between mb-2">
+                            <h3 className="text-lg font-bold text-gray-900">
+                              {notification.title}
+                            </h3>
+                            {isUnread && (
+                              <span className="h-3 w-3 bg-[#D7490C] rounded-full flex-shrink-0 mt-1" />
+                            )}
+                          </div>
+
+                          <p className="text-gray-700 mb-3">
+                            {notification.message}
+                          </p>
+
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-gray-500">
+                              {formatTime(notification.createdAt)}
+                            </span>
+
+                            <div className="flex gap-2">
+                              {isUnread && (
+                                <button
+                                  onClick={() => markAsRead(notification._id)}
+                                  className="flex items-center gap-1 px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                >
+                                  <Check className="w-4 h-4" />
+                                  Mark as read
+                                </button>
+                              )}
+
                               <button
-                                onClick={() => markAsRead(notification.id)}
-                                className="flex items-center gap-1 px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                onClick={() => deleteNotification(notification._id)}
+                                className="flex items-center gap-1 px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                               >
-                                <Check className="w-4 h-4" />
-                                Mark as read
+                                <Trash2 className="w-4 h-4" />
+                                Delete
                               </button>
-                            )}
-                            <button
-                              onClick={() =>
-                                deleteNotification(notification.id)
-                              }
-                              className="flex items-center gap-1 px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              Delete
-                            </button>
-                            {notification.link && (
-                              <a
-                                href={notification.link}
-                                className="px-3 py-1 text-sm bg-[#D7490C] text-white rounded-lg hover:bg-[#B7410E] transition-colors"
-                              >
-                                View
-                              </a>
-                            )}
+
+                              {notification.actionUrl && (
+                                <a
+                                  href={notification.actionUrl}
+                                  className="px-3 py-1 text-sm bg-[#D7490C] text-white rounded-lg hover:bg-[#B7410E] transition-colors"
+                                >
+                                  View
+                                </a>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              );
-            })
-          )}
-        </div>
+                );
+              })
+            )}
+
+            {/* ── Pagination ── */}
+            {totalPages > 1 && (
+              <div className="flex justify-center gap-2 pt-4">
+                <button
+                  onClick={() => fetchNotifications(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="px-4 py-2 rounded-lg bg-white shadow text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Previous
+                </button>
+                <span className="px-4 py-2 text-gray-600">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  onClick={() => fetchNotifications(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="px-4 py-2 rounded-lg bg-white shadow text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

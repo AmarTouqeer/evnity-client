@@ -454,7 +454,6 @@ const EventDetail = () => {
             <ReviewsSection eventId={id} currentUser={currentUser} />
 
           </div>
-          {/* ══════════ End Main Content Column ══════════ */}
 
           {/* ══════════ Booking Sidebar — customers only ══════════ */}
           {isCustomer && (
@@ -794,7 +793,7 @@ const EventDetail = () => {
               {/* Email */}
               {event.provider?.email && (
                 <a
-                  href={`mailto:${event.provider.email}?subject=Inquiry about ${eventName}`}
+                  href={`https://mail.google.com/mail/?view=cm&fs=1&to=${event.provider.email}&su=Inquiry about ${eventName}`}
                   className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-[#D7490C] hover:bg-orange-50 transition-colors group"
                 >
                   <div className="w-9 h-9 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
