@@ -283,111 +283,111 @@ const AddListing = () => {
     });
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+ const handleSubmit = async (e) => {
+  e.preventDefault();
 
-    if (images.length === 0) {
-      alert("Please upload at least one image");
-      return;
+  if (images.length === 0) {
+    alert("Please upload at least one image");
+    return;
+  }
+
+  try {
+    setLoading(true);
+
+    const formDataImages = new FormData();
+    images.forEach((image) => {
+      formDataImages.append("images", image.file);
+    });
+
+    const uploadResponse = await uploadAPI.uploadMultiple(formDataImages);
+    if (!uploadResponse.success) {
+      throw new Error(uploadResponse.message || "Failed to upload images");
     }
 
-    try {
-      setLoading(true);
-
-      const formDataImages = new FormData();
-      images.forEach((image) => {
-        formDataImages.append("images", image.file);
-      });
-
-      const uploadResponse = await uploadAPI.uploadMultiple(formDataImages);
-      if (!uploadResponse.success) {
-        throw new Error(uploadResponse.message || "Failed to upload images");
-      }
-
-      const uploadedImages = uploadResponse.data.images || uploadResponse.data || [];
-      if (uploadedImages.length === 0) {
-        throw new Error("No images were uploaded");
-      }
-
-      const coordinates = getCityCoordinates(formData.location);
-      if (!coordinates) {
-        throw new Error("Invalid city selected");
-      }
-
-      let response;
-
-      if (listingType === "event") {
-        const eventData = {
-          title: formData.title,
-          description: formData.description,
-          category: formData.category.toLowerCase(),
-          venue: formData.title,
-          location: {
-            city: formData.location,
-            address: formData.address || formData.location,
-            geo: {
-              type: "Point",
-              coordinates: [coordinates.lng, coordinates.lat],
-            },
-          },
-          charges: Number(formData.price),
-          capacity: Number(formData.capacity),
-          images: uploadedImages.map((img) => ({ url: img.url, publicId: img.publicId })),
-          paymentOptions,
-          availableDates,
-        };
-        response = await eventAPI.create(eventData);
-
-      } else if (listingType === "service") {
-        const serviceData = {
-          title: formData.title,
-          description: formData.description,
-          category: formData.category.toLowerCase(),
-          pricing: {
-            basePrice: Number(formData.price),
-            pricingType: "package",
-          },
-          location: {
-            city: formData.location,
-            address: formData.address || formData.location,
-          },
-          images: uploadedImages.map((img) => ({ url: img.url, publicId: img.publicId })),
-          paymentOptions,  // ✅ included
-        };
-        response = await serviceAPI.create(serviceData);
-
-      } else if (listingType === "resource") {
-        const resourceData = {
-          name: formData.title,
-          description: formData.description,
-          category: formData.category.toLowerCase(),
-          rentalPrice: Number(formData.price),
-          quantity: Number(formData.quantity),
-          availableQuantity: Number(formData.quantity),
-          location: {
-            city: formData.location,
-            address: formData.address || formData.location,
-          },
-          images: uploadedImages.map((img) => ({ url: img.url, publicId: img.publicId })),
-          paymentOptions,  // ✅ included
-        };
-        response = await resourceAPI.create(resourceData);
-      }
-
-      if (response.success) {
-        alert(`${listingType.charAt(0).toUpperCase() + listingType.slice(1)} listing submitted for admin approval!`);
-        navigate("/provider/dashboard");
-      } else {
-        throw new Error(response.message || "Failed to create listing");
-      }
-    } catch (error) {
-      console.error("Error creating listing:", error);
-      alert(error.message || "Failed to create listing. Please try again.");
-    } finally {
-      setLoading(false);
+    const uploadedImages = uploadResponse.data.images || uploadResponse.data || [];
+    if (uploadedImages.length === 0) {
+      throw new Error("No images were uploaded");
     }
-  };
 
+    const coordinates = getCityCoordinates(formData.location);
+    if (!coordinates) {
+      throw new Error("Invalid city selected");
+    }
+
+    let response;
+
+    if (listingType === "event") {
+      const eventData = {
+        title: formData.title,
+        description: formData.description,
+        category: formData.category.toLowerCase(),
+        venue: formData.title,
+        location: {
+          city: formData.location,
+          address: formData.address || formData.location,
+          geo: {
+            type: "Point",
+            coordinates: [coordinates.lng, coordinates.lat],
+          },
+        },
+        charges: Number(formData.price),
+        capacity: Number(formData.capacity),
+        images: uploadedImages.map((img) => ({ url: img.url, publicId: img.publicId })),
+        paymentOptions,
+        availableDates,
+      };
+      response = await eventAPI.create(eventData);
+
+    } else if (listingType === "service") {
+      const serviceData = {
+        title: formData.title,
+        description: formData.description,
+        category: formData.category.toLowerCase(),
+        pricing: {
+          basePrice: Number(formData.price),
+          pricingType: "package",
+        },
+        location: {
+          city: formData.location,
+          address: formData.address || formData.location,
+        },
+        images: uploadedImages.map((img) => ({ url: img.url, publicId: img.publicId })),
+        paymentOptions,
+        availableDates,   // ← this was missing from the first (only) service block
+      };
+      response = await serviceAPI.create(serviceData);
+
+    } else if (listingType === "resource") {
+      const resourceData = {
+        name: formData.title,
+        description: formData.description,
+        category: formData.category.toLowerCase(),
+        rentalPrice: Number(formData.price),
+        quantity: Number(formData.quantity),
+        availableQuantity: Number(formData.quantity),
+        location: {
+          city: formData.location,
+          address: formData.address || formData.location,
+        },
+        images: uploadedImages.map((img) => ({ url: img.url, publicId: img.publicId })),
+        paymentOptions,
+      };
+      response = await resourceAPI.create(resourceData);
+    }
+
+    if (response.success) {
+      alert(`${listingType.charAt(0).toUpperCase() + listingType.slice(1)} listing submitted for admin approval!`);
+      navigate("/provider/dashboard");
+    } else {
+      throw new Error(response.message || "Failed to create listing");
+    }
+  } catch (error) {
+    console.error("Error creating listing:", error);
+    alert(error.message || "Failed to create listing. Please try again.");
+  } finally {
+    setLoading(false);
+  }
+};
   const getCategories = () => {
     switch (listingType) {
       case "event": return eventCategories;
@@ -552,7 +552,7 @@ const AddListing = () => {
             )}
 
             {/* Available Dates — event only */}
-            {listingType === "event" && (
+           {(listingType === "event" || listingType === "service") && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
