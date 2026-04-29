@@ -8,385 +8,323 @@ import {
   AlertCircle,
   CheckCircle,
   XCircle,
-  Clock,
-  TrendingUp,
-  Search,
-  Filter,
-  Eye,
   Check,
   X,
   LogOut,
 } from "lucide-react";
-import { paymentAPI } from "../services/api"
-const AdminDashboard = () => {
-  const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("overview");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [actionLoading, setActionLoading] = useState(null);
-  const [showRejectModal, setShowRejectModal] = useState(false);
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [rejectionReason, setRejectionReason] = useState("");
+import { paymentAPI } from "../services/api";
+import DataTable from "../components/DataTable";
 
-  // Real data from backend
-  const [stats, setStats] = useState({
-    totalUsers: 0,
-    pendingUsers: 0,
-    totalEvents: 0,
-    pendingEvents: 0,
-    totalServices: 0,
-    pendingServices: 0,
-    totalResources: 0,
-    pendingResources: 0,
-    totalBookings: 0,
-    totalRevenue: 0,
-    grossRevenue: 0,       // ← NEW
-    providerPayouts: 0,
-    activeComplaints: 0,
+/* ─────────────────────────── helpers ─────────────────────────────────────── */
+const api = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
+const authGet = async (path) => {
+  const token = localStorage.getItem("token");
+  const res   = await fetch(`${api}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`GET ${path} failed (${res.status})`);
+  return res.json();
+};
+
+const authPost = async (path, body = {}) => {
+  const token = localStorage.getItem("token");
+  const res   = await fetch(`${api}${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+};
+
+const money = (n, d = 2) =>
+  Number(n || 0).toLocaleString(undefined, {
+    minimumFractionDigits: d,
+    maximumFractionDigits: d,
   });
 
-  const [pendingUsers, setPendingUsers] = useState([]);
-  const [approvedUsers, setApprovedUsers] = useState([]);
-  const [rejectedUsers, setRejectedUsers] = useState([]);
+/* ── status badge ── */
+const STATUS_CFG = {
+  pending:  "bg-yellow-100 text-yellow-700",
+  approved: "bg-emerald-100 text-emerald-700",
+  rejected: "bg-rose-100 text-rose-700",
+  published:"bg-sky-100 text-sky-700",
+};
+const Badge = ({ status }) => (
+  <span
+    className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full capitalize ${
+      STATUS_CFG[status] ?? "bg-gray-100 text-gray-500"
+    }`}
+  >
+    {status ?? "—"}
+  </span>
+);
 
-  // Events, Services, Resources
-  const [pendingEvents, setPendingEvents] = useState([]);
-  const [pendingServices, setPendingServices] = useState([]);
-  const [pendingResources, setPendingResources] = useState([]);
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [showRejectItemModal, setShowRejectItemModal] = useState(false);
-  const [itemRejectionReason, setItemRejectionReason] = useState("");
-  const [itemType, setItemType] = useState(""); // 'event', 'service', or 'resource'
+/* ── role badge ── */
+const RoleBadge = ({ role }) => (
+  <span
+    className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full capitalize ${
+      role === "provider" ? "bg-blue-100 text-blue-700" : "bg-green-100 text-green-700"
+    }`}
+  >
+    {role}
+  </span>
+);
 
-  // Check authentication on mount
+/* ── sub-filter strip ── */
+const SubFilter = ({ value, onChange, counts }) => {
+  const opts = [
+    { key: "all",      label: "All"      },
+    { key: "pending",  label: "Pending"  },
+    { key: "approved", label: "Approved" },
+    { key: "rejected", label: "Rejected" },
+  ];
+  return (
+    <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit flex-wrap">
+      {opts.map(({ key, label }) => (
+        <button
+          key={key}
+          onClick={() => onChange(key)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+            value === key
+              ? "bg-white shadow text-[#D7490C]"
+              : "text-gray-500 hover:text-gray-800"
+          }`}
+        >
+          {label}
+          <span
+            className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+              value === key ? "bg-orange-100 text-[#D7490C]" : "bg-gray-200 text-gray-500"
+            }`}
+          >
+            {counts[key] ?? 0}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+};
+
+/* ── stat card ── */
+const StatCard = ({ icon, iconBg, title, total, pending }) => (
+  <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex items-center gap-4">
+    <div className={`p-3 rounded-xl shrink-0 ${iconBg}`}>{icon}</div>
+    <div className="flex-1 min-w-0">
+      <p className="text-2xl font-bold text-gray-900">{total.toLocaleString()}</p>
+      <p className="text-sm text-gray-500 mt-0.5">{title}</p>
+    </div>
+    {pending > 0 && (
+      <span className="shrink-0 text-[11px] font-semibold bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full">
+        {pending} pending
+      </span>
+    )}
+  </div>
+);
+
+/* ── reject modal ── */
+const RejectModal = ({ title, onConfirm, onCancel, loading }) => {
+  const [reason, setReason] = useState("");
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-in fade-in zoom-in-95 duration-150">
+        <div className="p-6 border-b border-gray-100 flex items-center gap-3">
+          <div className="p-2 bg-rose-100 rounded-lg">
+            <XCircle className="w-5 h-5 text-rose-600" />
+          </div>
+          <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+        </div>
+        <div className="p-6 space-y-3">
+          <p className="text-sm text-gray-500">
+            This reason will be visible to the user / provider.
+          </p>
+          <textarea
+            className="w-full border border-gray-200 rounded-xl p-3 text-sm resize-none
+                       focus:outline-none focus:ring-2 focus:ring-[#D7490C]/25 focus:border-[#D7490C] transition"
+            rows={4}
+            placeholder="Enter rejection reason (min 10 characters)…"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            maxLength={500}
+            autoFocus
+          />
+          <p className="text-right text-[11px] text-gray-400">{reason.length}/500</p>
+        </div>
+        <div className="px-6 pb-6 flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 transition"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onConfirm(reason)}
+            disabled={loading || reason.trim().length < 10}
+            className="px-4 py-2 text-sm bg-rose-600 text-white rounded-lg hover:bg-rose-700
+                       disabled:opacity-40 disabled:cursor-not-allowed transition"
+          >
+            {loading ? "Rejecting…" : "Confirm Rejection"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  AdminDashboard                                                             */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+export default function AdminDashboard() {
+  const navigate = useNavigate();
+
+  const [activeTab, setActiveTab]       = useState("overview");
+  const [isLoading, setIsLoading]       = useState(true);
+  const [error,     setError]           = useState("");
+  const [busyId,    setBusyId]          = useState(null);   // row being actioned
+
+  /* sub-filters */
+  const [userFilter,     setUserFilter]     = useState("all");
+  const [eventFilter,    setEventFilter]    = useState("all");
+  const [serviceFilter,  setServiceFilter]  = useState("all");
+  const [resourceFilter, setResourceFilter] = useState("all");
+
+  /* reject modal state */
+  const [rejectTarget, setRejectTarget] = useState(null); // { type, row }
+
+  /* data */
+  const [allUsers,     setAllUsers]     = useState([]);
+  const [allEvents,    setAllEvents]    = useState([]);
+  const [allServices,  setAllServices]  = useState([]);
+  const [allResources, setAllResources] = useState([]);
+
+  const [stats, setStats] = useState({
+    totalUsers: 0, pendingUsers: 0,
+    totalEvents: 0, pendingEvents: 0,
+    totalServices: 0, pendingServices: 0,
+    totalResources: 0, pendingResources: 0,
+    totalBookings: 0, totalRevenue: 0,
+    grossRevenue: 0, providerPayouts: 0,
+  });
+
+  /* ── auth guard ── */
   useEffect(() => {
     const token = localStorage.getItem("token");
-    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    const user  = JSON.parse(localStorage.getItem("user") || "{}");
+    if (!token || user.role !== "admin") { navigate("/admin/login"); return; }
+    load();
+  }, []);
 
-    if (!token || user.role !== "admin") {
-      navigate("/admin/login");
-      return;
+  /* ── data loader ── */
+  const load = async () => {
+    setIsLoading(true);
+    setError("");
+
+    const settled = async (fn) => {
+      try { return await fn(); } catch { return null; }
+    };
+
+    /* users */
+    const [userStats, pend, appr, rej] = await Promise.all([
+      settled(() => authGet("/admin/user-stats")),
+      settled(() => authGet("/admin/pending-users?limit=500")),
+      settled(() => authGet("/admin/approved-users?limit=500")),
+      settled(() => authGet("/admin/rejected-users?limit=500")),
+    ]);
+
+    if (userStats) {
+      const o = userStats.data.overall;
+      setStats((s) => ({ ...s, totalUsers: o.total, pendingUsers: o.pending }));
     }
 
-    fetchData();
-  }, [navigate]);
+    const pendUsers = pend?.data?.users ?? [];
+    const apprUsers = appr?.data?.users ?? [];
+    const rejUsers  = rej?.data?.users  ?? [];
 
-  const fetchData = async () => {
+    setAllUsers([
+      ...pendUsers.map((u) => ({ ...u, _status: "pending"  })),
+      ...apprUsers.map((u) => ({ ...u, _status: "approved" })),
+      ...rejUsers .map((u) => ({ ...u, _status: "rejected" })),
+    ]);
+
+    /* events */
+    const [allEv, pendEv] = await Promise.all([
+      settled(() => authGet("/events?limit=1000")),
+      settled(() => authGet("/events?adminApprovalStatus=pending&limit=500")),
+    ]);
+    const evArr  = allEv?.data?.events  ?? allEv?.data  ?? [];
+    const pevArr = pendEv?.data?.events ?? pendEv?.data ?? [];
+    setAllEvents(evArr);
+    setStats((s) => ({ ...s, totalEvents: evArr.length, pendingEvents: pevArr.length }));
+
+    /* services */
+    const [allSv, pendSv] = await Promise.all([
+      settled(() => authGet("/services?limit=1000")),
+      settled(() => authGet("/services?adminApprovalStatus=pending&limit=500")),
+    ]);
+    const svArr  = allSv?.data?.services  ?? allSv?.data  ?? [];
+    const psvArr = pendSv?.data?.services ?? pendSv?.data ?? [];
+    setAllServices(svArr);
+    setStats((s) => ({ ...s, totalServices: svArr.length, pendingServices: psvArr.length }));
+
+    /* resources */
+    const [allRs, pendRs] = await Promise.all([
+      settled(() => authGet("/resources?limit=1000")),
+      settled(() => authGet("/resources?adminApprovalStatus=pending&limit=500")),
+    ]);
+    const rsArr  = allRs?.data?.resources  ?? allRs?.data  ?? [];
+    const prsArr = pendRs?.data?.resources ?? pendRs?.data ?? [];
+    setAllResources(rsArr);
+    setStats((s) => ({ ...s, totalResources: rsArr.length, pendingResources: prsArr.length }));
+
+    setIsLoading(false);
+
+    /* revenue — non-blocking */
     try {
-      const token = localStorage.getItem("token");
-      const apiUrl =
-        import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-
-      // Fetch user stats
-      const statsResponse = await fetch(`${apiUrl}/admin/user-stats`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (statsResponse.ok) {
-        const statsData = await statsResponse.json();
-        setStats({
-          totalUsers: statsData.data.overall.total,
-          pendingUsers: statsData.data.overall.pending,
-          approvedUsers: statsData.data.overall.approved,
-          rejectedUsers: statsData.data.overall.rejected,
-          totalEvents: 0, // TODO: Add events API
-          pendingEvents: 0,
-          totalServices: 0, // TODO: Add services API
-          pendingServices: 0,
-          totalResources: 0, // TODO: Add resources API
-          pendingResources: 0,
-          totalBookings: 0, // TODO: Add bookings API
-          totalRevenue: 0, // TODO: Add revenue API
-          activeComplaints: 0, // TODO: Add complaints API
-        });
-      }
-
-      // Fetch pending users
-      const pendingResponse = await fetch(
-        `${apiUrl}/admin/pending-users?limit=50`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (pendingResponse.ok) {
-        const pendingData = await pendingResponse.json();
-        setPendingUsers(pendingData.data.users);
-      }
-
-      // Fetch approved users
-      const approvedResponse = await fetch(
-        `${apiUrl}/admin/approved-users?limit=20`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (approvedResponse.ok) {
-        const approvedData = await approvedResponse.json();
-        setApprovedUsers(approvedData.data.users);
-      }
-
-      // Fetch rejected users
-      const rejectedResponse = await fetch(
-        `${apiUrl}/admin/rejected-users?limit=20`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (rejectedResponse.ok) {
-        const rejectedData = await rejectedResponse.json();
-        setRejectedUsers(rejectedData.data.users);
-      }
-
-      // Fetch ALL events count (no limit)
-      const allEventsResponse = await fetch(`${apiUrl}/events?limit=1000`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (allEventsResponse.ok) {
-        const allEventsData = await allEventsResponse.json();
-        const totalEventsCount =
-          allEventsData.data.events?.length || allEventsData.data?.length || 0;
-
-        setStats((prev) => ({
-          ...prev,
-          totalEvents: totalEventsCount,
-        }));
-      }
-
-      // Fetch pending events
-      const eventsResponse = await fetch(
-        `${apiUrl}/events?adminApprovalStatus=pending&limit=50`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (eventsResponse.ok) {
-        const eventsData = await eventsResponse.json();
-        setPendingEvents(eventsData.data.events || eventsData.data || []);
-
-        // Update stats with event count
-        setStats((prev) => ({
-          ...prev,
-          pendingEvents:
-            eventsData.data.events?.length || eventsData.data?.length || 0,
-        }));
-      }
-
-      // Fetch ALL services count
-      const allServicesResponse = await fetch(`${apiUrl}/services?limit=1000`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (allServicesResponse.ok) {
-        const allServicesData = await allServicesResponse.json();
-        const totalServicesCount =
-          allServicesData.data.services?.length ||
-          allServicesData.data?.length ||
-          0;
-
-        setStats((prev) => ({
-          ...prev,
-          totalServices: totalServicesCount,
-        }));
-      }
-
-      // Fetch pending services
-      const servicesResponse = await fetch(
-        `${apiUrl}/services?adminApprovalStatus=pending&limit=50`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (servicesResponse.ok) {
-        const servicesData = await servicesResponse.json();
-        setPendingServices(
-          servicesData.data.services || servicesData.data || []
-        );
-
-        // Update stats with service count
-        setStats((prev) => ({
-          ...prev,
-          pendingServices:
-            servicesData.data.services?.length ||
-            servicesData.data?.length ||
-            0,
-        }));
-      }
-
-      // Fetch ALL resources count
-      const allResourcesResponse = await fetch(
-        `${apiUrl}/resources?limit=1000`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (allResourcesResponse.ok) {
-        const allResourcesData = await allResourcesResponse.json();
-        const totalResourcesCount =
-          allResourcesData.data.resources?.length ||
-          allResourcesData.data?.length ||
-          0;
-
-        setStats((prev) => ({
-          ...prev,
-          totalResources: totalResourcesCount,
-        }));
-      }
-
-      // Fetch pending resources
-      const resourcesResponse = await fetch(
-        `${apiUrl}/resources?adminApprovalStatus=pending&limit=50`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (resourcesResponse.ok) {
-        const resourcesData = await resourcesResponse.json();
-        setPendingResources(
-          resourcesData.data.resources || resourcesData.data || []
-        );
-
-        // Update stats with resource count
-        setStats((prev) => ({
-          ...prev,
-          pendingResources:
-            resourcesData.data.resources?.length ||
-            resourcesData.data?.length ||
-            0,
-        }));
-      }
-
-      setIsLoading(false);
-    } catch (error) {
-      console.error("Fetch error:", error);
-      setError("Failed to load data");
-      setIsLoading(false);
-    }
-
-    // Fetch platform fee revenue (deducted from providers)
-    // Fetch platform fee revenue (deducted from providers)
-    try {
-      const feesData = await paymentAPI.getAdminDeductedFees();
-      const t = feesData.data?.totals || {};
-
-      setStats((prev) => ({
-        ...prev,
-        totalRevenue: t.totalDeductedFees || 0,
-        totalBookings: t.totalBookings || 0,
-        grossRevenue: t.totalGrossRevenue || 0,
-        providerPayouts: t.totalPaidToProviders || 0,
+      const fees = await paymentAPI.getAdminDeductedFees();
+      const t    = fees.data?.totals ?? {};
+      setStats((s) => ({
+        ...s,
+        totalRevenue:    t.totalDeductedFees    ?? 0,
+        totalBookings:   t.totalBookings        ?? 0,
+        grossRevenue:    t.totalGrossRevenue    ?? 0,
+        providerPayouts: t.totalPaidToProviders ?? 0,
       }));
-    } catch (feesErr) {
-      console.error("Failed to load platform fees:", feesErr);
-      // Don't block the rest of the dashboard — just leave those stats at 0
-    }
+    } catch { /* ignore */ }
   };
 
-  const handleApproveUser = async (userId, userName) => {
-    if (!confirm(`Are you sure you want to approve ${userName}?`)) return;
-
-    setActionLoading(userId);
-    try {
-      const token = localStorage.getItem("token");
-      const apiUrl =
-        import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-
-      const response = await fetch(`${apiUrl}/admin/approve-user/${userId}`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (response.ok) {
-        await fetchData(); // Refresh data
-        alert(`${userName} has been approved successfully!`);
-      } else {
-        const data = await response.json();
-        alert(data.message || "Failed to approve user");
-      }
-    } catch (error) {
-      console.error("Approve error:", error);
-      alert("An error occurred while approving the user");
-    } finally {
-      setActionLoading(null);
-    }
+  /* ── actions ── */
+  const approve = async (type, row) => {
+    if (!confirm(`Approve this ${type}?`)) return;
+    setBusyId(row._id);
+    const ep = {
+      user:     `/admin/approve-user/${row._id}`,
+      event:    `/admin/approve-event/${row._id}`,
+      service:  `/admin/approve-service/${row._id}`,
+      resource: `/admin/approve-resource/${row._id}`,
+    }[type];
+    const res = await authPost(ep);
+    if (res.success ?? true) { await load(); }
+    else alert(res.message ?? "Failed to approve");
+    setBusyId(null);
   };
 
-  const openRejectModal = (user) => {
-    setSelectedUser(user);
-    setShowRejectModal(true);
-  };
-
-  const handleRejectUser = async () => {
-    if (!rejectionReason || rejectionReason.trim().length < 10) {
-      alert("Please provide a rejection reason (minimum 10 characters)");
-      return;
+  const reject = async (reason) => {
+    if (!rejectTarget) return;
+    const { type, row } = rejectTarget;
+    setBusyId(row._id);
+    const ep = {
+      user:     `/admin/reject-user/${row._id}`,
+      event:    `/admin/reject-event/${row._id}`,
+      service:  `/admin/reject-service/${row._id}`,
+      resource: `/admin/reject-resource/${row._id}`,
+    }[type];
+    const res = await authPost(ep, { reason });
+    if (res.success ?? true) {
+      setRejectTarget(null);
+      await load();
+    } else {
+      alert(res.message ?? "Failed to reject");
     }
-
-    setActionLoading(selectedUser._id);
-    try {
-      const token = localStorage.getItem("token");
-      const apiUrl =
-        import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-
-      const response = await fetch(
-        `${apiUrl}/admin/reject-user/${selectedUser._id}`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ reason: rejectionReason }),
-        }
-      );
-
-      if (response.ok) {
-        await fetchData(); // Refresh data
-        alert(`${selectedUser.name} has been rejected`);
-        setShowRejectModal(false);
-        setSelectedUser(null);
-        setRejectionReason("");
-      } else {
-        const data = await response.json();
-        alert(data.message || "Failed to reject user");
-      }
-    } catch (error) {
-      console.error("Reject error:", error);
-      alert("An error occurred while rejecting the user");
-    } finally {
-      setActionLoading(null);
-    }
+    setBusyId(null);
   };
 
   const handleLogout = () => {
@@ -395,262 +333,281 @@ const AdminDashboard = () => {
     navigate("/login");
   };
 
-  // Approve/Reject Events, Services, Resources
-  const handleApproveItem = async (type, itemId, itemName) => {
-    const typeLabel = type.toLowerCase();
-    if (!confirm(`Are you sure you want to approve this ${typeLabel}?`)) return;
+  /* ── filter helpers ── */
+  const byStatus = (arr, filter, key = "adminApprovalStatus") =>
+    filter === "all"
+      ? arr
+      : arr.filter((r) => (r[key] || r._status) === filter);
 
-    setActionLoading(itemId);
-    try {
-      const token = localStorage.getItem("token");
-      const apiUrl =
-        import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+  const countBy = (arr, key = "adminApprovalStatus") => ({
+    all:      arr.length,
+    pending:  arr.filter((r) => (r[key] || r._status) === "pending").length,
+    approved: arr.filter((r) => (r[key] || r._status) === "approved").length,
+    rejected: arr.filter((r) => (r[key] || r._status) === "rejected").length,
+  });
 
-      const endpoint =
-        type === "event"
-          ? `${apiUrl}/admin/approve-event/${itemId}`
-          : type === "service"
-            ? `${apiUrl}/admin/approve-service/${itemId}`
-            : `${apiUrl}/admin/approve-resource/${itemId}`;
+  /* ── column definitions ── */
+  const userColumns = [
+    {
+      key: "_avatar", label: "", width: "44px",
+      render: (r) => (
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#B7410E] to-[#D7490C]
+                        flex items-center justify-center text-white text-xs font-bold shrink-0">
+          {(r.name ?? "?").charAt(0).toUpperCase()}
+        </div>
+      ),
+    },
+    { key: "name",  label: "Name",  sortable: true },
+    { key: "email", label: "Email", sortable: true },
+    { key: "phone", label: "Phone" },
+    { key: "role",  label: "Role",  sortable: true,
+      render: (r) => <RoleBadge role={r.role} />,
+    },
+    { key: "city",  label: "City",  sortable: true },
+    {
+      key: "_status", label: "Status", sortable: true,
+      render: (r) => <Badge status={r._status} />,
+    },
+    {
+      key: "createdAt", label: "Registered", sortable: true,
+      render: (r) => new Date(r.createdAt).toLocaleDateString(),
+    },
+  ];
 
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
+  const thumbCell = (colorClass, Icon) => ({
+    key: "_img", label: "", width: "60px",
+    render: (r) =>
+      r.images?.[0]?.url ? (
+        <img src={r.images[0].url} alt="" className="w-11 h-9 object-cover rounded" />
+      ) : (
+        <div className={`w-11 h-9 rounded flex items-center justify-center ${colorClass}`}>
+          <Icon className="w-4 h-4 opacity-50" />
+        </div>
+      ),
+  });
 
-      if (response.ok) {
-        await fetchData(); // Refresh data
-        alert(`${type} has been approved and published successfully!`);
-      } else {
-        const data = await response.json();
-        alert(data.message || `Failed to approve ${typeLabel}`);
-      }
-    } catch (error) {
-      console.error("Approve error:", error);
-      alert(`An error occurred while approving the ${typeLabel}`);
-    } finally {
-      setActionLoading(null);
-    }
-  };
+  const eventColumns = [
+    thumbCell("bg-orange-100 text-orange-400", Calendar),
+    { key: "title",    label: "Title",    sortable: true },
+    { key: "category", label: "Category", sortable: true,
+      render: (r) => (
+        <span className="text-[11px] px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full font-medium">
+          {r.category}
+        </span>
+      ),
+    },
+    { key: "provider.name", label: "Provider", sortable: true,
+      render: (r) => r.provider?.name ?? "—",
+    },
+    { key: "location.city", label: "City", sortable: true,
+      render: (r) => r.location?.city ?? "—",
+    },
+    { key: "venue",    label: "Venue" },
+    { key: "capacity", label: "Capacity", sortable: true },
+    { key: "charges",  label: "Price",    sortable: true,
+      render: (r) => r.charges ? `PKR ${Number(r.charges).toLocaleString()}` : "—",
+    },
+    { key: "adminApprovalStatus", label: "Status", sortable: true,
+      render: (r) => <Badge status={r.adminApprovalStatus} />,
+    },
+    { key: "createdAt", label: "Date", sortable: true,
+      render: (r) => new Date(r.createdAt).toLocaleDateString(),
+    },
+  ];
 
-  const openRejectItemModal = (type, item) => {
-    setItemType(type);
-    setSelectedItem(item);
-    setShowRejectItemModal(true);
-  };
+  const serviceColumns = [
+    thumbCell("bg-purple-100 text-purple-400", Package),
+    { key: "title",    label: "Title",    sortable: true },
+    { key: "category", label: "Category", sortable: true,
+      render: (r) => (
+        <span className="text-[11px] px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full font-medium">
+          {r.category}
+        </span>
+      ),
+    },
+    { key: "provider.name", label: "Provider", sortable: true,
+      render: (r) => r.provider?.name ?? "—",
+    },
+    { key: "location.city", label: "City", sortable: true,
+      render: (r) => r.location?.city ?? "—",
+    },
+    { key: "pricing.basePrice", label: "Base Price", sortable: true,
+      render: (r) => r.pricing?.basePrice ? `PKR ${Number(r.pricing.basePrice).toLocaleString()}` : "—",
+    },
+    { key: "adminApprovalStatus", label: "Status", sortable: true,
+      render: (r) => <Badge status={r.adminApprovalStatus} />,
+    },
+    { key: "createdAt", label: "Date", sortable: true,
+      render: (r) => new Date(r.createdAt).toLocaleDateString(),
+    },
+  ];
 
-  const handleRejectItem = async () => {
-    if (!itemRejectionReason || itemRejectionReason.trim().length < 10) {
-      alert("Please provide a rejection reason (minimum 10 characters)");
-      return;
-    }
+  const resourceColumns = [
+    thumbCell("bg-emerald-100 text-emerald-400", Package),
+    { key: "name",     label: "Name",     sortable: true },
+    { key: "category", label: "Category", sortable: true,
+      render: (r) => (
+        <span className="text-[11px] px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full font-medium">
+          {r.category}
+        </span>
+      ),
+    },
+    { key: "provider.name", label: "Provider", sortable: true,
+      render: (r) => r.provider?.name ?? "—",
+    },
+    { key: "location.city", label: "City", sortable: true,
+      render: (r) => r.location?.city ?? "—",
+    },
+    { key: "rentalPrice", label: "Rental Price", sortable: true,
+      render: (r) => r.rentalPrice ? `PKR ${Number(r.rentalPrice).toLocaleString()}` : "—",
+    },
+    { key: "availableQuantity", label: "Qty", sortable: true },
+    { key: "adminApprovalStatus", label: "Status", sortable: true,
+      render: (r) => <Badge status={r.adminApprovalStatus} />,
+    },
+    { key: "createdAt", label: "Date", sortable: true,
+      render: (r) => new Date(r.createdAt).toLocaleDateString(),
+    },
+  ];
 
-    setActionLoading(selectedItem._id);
-    try {
-      const token = localStorage.getItem("token");
-      const apiUrl =
-        import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+  /* ── action builders ── */
+  const makeActions = (type, statusKey = "adminApprovalStatus") => [
+    {
+      label: "Approve",
+      color: "green",
+      icon: <Check className="w-3.5 h-3.5" />,
+      disabled: (r) => (r[statusKey] || r._status) !== "pending",
+      loading:  (r) => busyId === r._id,
+      onClick:  (r) => approve(type, r),
+    },
+    {
+      label: "Reject",
+      color: "red",
+      icon: <X className="w-3.5 h-3.5" />,
+      disabled: (r) => (r[statusKey] || r._status) !== "pending",
+      loading:  (r) => busyId === r._id,
+      onClick:  (r) => setRejectTarget({ type, row: r }),
+    },
+  ];
 
-      const endpoint =
-        itemType === "event"
-          ? `${apiUrl}/admin/reject-event/${selectedItem._id}`
-          : itemType === "service"
-            ? `${apiUrl}/admin/reject-service/${selectedItem._id}`
-            : `${apiUrl}/admin/reject-resource/${selectedItem._id}`;
+  const userActions  = makeActions("user",     "_status");
+  const eventActions = makeActions("event");
+  const serviceActions  = makeActions("service");
+  const resourceActions = makeActions("resource");
 
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ reason: itemRejectionReason }),
-      });
-
-      if (response.ok) {
-        await fetchData(); // Refresh data
-        alert(
-          `${itemType.charAt(0).toUpperCase() + itemType.slice(1)
-          } has been rejected`
-        );
-        setShowRejectItemModal(false);
-        setSelectedItem(null);
-        setItemRejectionReason("");
-        setItemType("");
-      } else {
-        const data = await response.json();
-        alert(data.message || `Failed to reject ${itemType}`);
-      }
-    } catch (error) {
-      console.error("Reject error:", error);
-      alert(`An error occurred while rejecting the ${itemType}`);
-    } finally {
-      setActionLoading(null);
-    }
-  };
+  /* ── tabs config ── */
+  const TABS = ["overview","users","events","services","resources","complaints"];
 
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-[#D7490C] mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading dashboard...</p>
+          <div className="w-14 h-14 rounded-full border-4 border-[#D7490C] border-t-transparent animate-spin mx-auto" />
+          <p className="mt-4 text-sm text-gray-500">Loading dashboard…</p>
         </div>
       </div>
     );
   }
 
+  const pendingUserRows = allUsers.filter((u) => u._status === "pending");
+
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-[#B7410E] to-[#D7490C] text-white">
-        <div className="max-w-7xl mx-auto px-6 py-8">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
-              <p className="text-orange-100">
-                Manage users, events, services, resources, and complaints
-              </p>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition"
-            >
-              <LogOut className="w-5 h-5" />
-              Logout
-            </button>
+      {/* ── header ── */}
+      <header className="bg-gradient-to-r from-[#B7410E] to-[#D7490C] text-white">
+        <div className="max-w-7xl mx-auto px-6 py-7 flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Admin Dashboard</h1>
+            <p className="text-orange-200 text-sm mt-0.5">
+              Manage users · events · services · resources
+            </p>
           </div>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/15
+                       hover:bg-white/25 transition text-sm font-medium"
+          >
+            <LogOut className="w-4 h-4" /> Logout
+          </button>
         </div>
-      </div>
+      </header>
 
       {error && (
         <div className="max-w-7xl mx-auto px-6 pt-4">
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+          <div className="text-sm bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-lg">
             {error}
           </div>
         </div>
       )}
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Statistics Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <Users className="w-6 h-6 text-blue-600" />
-              </div>
-              <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full">
-                {stats.pendingUsers} pending
-              </span>
-            </div>
-            <div className="text-2xl font-bold text-gray-900 mb-1">
-              {stats.totalUsers}
-            </div>
-            <div className="text-sm text-gray-600">Total Users</div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-orange-100 rounded-lg">
-                <Calendar className="w-6 h-6 text-[#D7490C]" />
-              </div>
-              <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full">
-                {stats.pendingEvents} pending
-              </span>
-            </div>
-            <div className="text-2xl font-bold text-gray-900 mb-1">
-              {stats.totalEvents}
-            </div>
-            <div className="text-sm text-gray-600">Total Events</div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-purple-100 rounded-lg">
-                <Package className="w-6 h-6 text-purple-600" />
-              </div>
-              <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full">
-                {stats.pendingServices + stats.pendingResources} pending
-              </span>
-            </div>
-            <div className="text-2xl font-bold text-gray-900 mb-1">
-              {stats.totalServices + stats.totalResources}
-            </div>
-            <div className="text-sm text-gray-600">Services & Resources</div>
-          </div>
-
-          {/* <div className="bg-white rounded-xl shadow-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-red-100 rounded-lg">
-                <AlertCircle className="w-6 h-6 text-red-600" />
-              </div>
-              <TrendingUp className="w-5 h-5 text-green-500" />
-            </div>
-            <div className="text-2xl font-bold text-gray-900 mb-1">
-              {stats.activeComplaints}
-            </div>
-            <div className="text-sm text-gray-600">Active Complants</div>
-          </div> */}
+      <main className="max-w-7xl mx-auto px-6 py-7 space-y-6">
+        {/* ── stat cards ── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <StatCard
+            icon={<Users className="w-6 h-6 text-blue-600" />}
+            iconBg="bg-blue-100"
+            title="Total Users"
+            total={stats.totalUsers}
+            pending={stats.pendingUsers}
+          />
+          <StatCard
+            icon={<Calendar className="w-6 h-6 text-[#D7490C]" />}
+            iconBg="bg-orange-100"
+            title="Total Events"
+            total={stats.totalEvents}
+            pending={stats.pendingEvents}
+          />
+          <StatCard
+            icon={<Package className="w-6 h-6 text-purple-600" />}
+            iconBg="bg-purple-100"
+            title="Services & Resources"
+            total={stats.totalServices + stats.totalResources}
+            pending={stats.pendingServices + stats.pendingResources}
+          />
         </div>
 
-        {/* Additional Stats */}
-        <div className="bg-white rounded-xl shadow-lg p-6 mb-7">
-          <div className="flex items-center">
-            <div className="p-3 bg-green-100 rounded-lg mr-4">
-              <DollarSign className="w-8 h-8 text-green-600" />
+        {/* ── revenue ── */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-emerald-100 rounded-xl shrink-0">
+              <DollarSign className="w-7 h-7 text-emerald-600" />
             </div>
-            <div className="flex-1">
-              <div className="text-sm text-gray-600">Platform Revenue (Fees)</div>
-              <div className="text-3xl font-bold text-green-600">
-                ${stats.totalRevenue.toLocaleString(undefined, {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </div>
+            <div>
+              <p className="text-sm text-gray-500">Platform Revenue (Fees)</p>
+              <p className="text-3xl font-bold text-emerald-600">${money(stats.totalRevenue)}</p>
             </div>
           </div>
-          <div className="mt-4 pt-3 border-t border-gray-100 grid grid-cols-2 gap-2 text-xs">
-            <div>
-              <div className="text-gray-500">Gross processed</div>
-              <div className="font-semibold text-gray-900">
-                ${(stats.grossRevenue || 0).toLocaleString(undefined, {
-                  minimumFractionDigits: 2,
-                })}
+          <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-3 gap-4 text-xs">
+            {[
+              ["Total Bookings",   stats.totalBookings,   false],
+              ["Gross Processed",  stats.grossRevenue,    true ],
+              ["Paid to Providers",stats.providerPayouts, true ],
+            ].map(([label, val, isMoney]) => (
+              <div key={label}>
+                <p className="text-gray-400">{label}</p>
+                <p className="font-semibold text-gray-800 mt-0.5">
+                  {isMoney ? `$${money(val)}` : Number(val).toLocaleString()}
+                </p>
               </div>
-            </div>
-            <div>
-              <div className="text-gray-500">Paid to providers</div>
-              <div className="font-semibold text-gray-900">
-                ${(stats.providerPayouts || 0).toLocaleString(undefined, {
-                  minimumFractionDigits: 2,
-                })}
-              </div>
-            </div>
+            ))}
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-          <div className="border-b border-gray-200">
-            <div className="flex gap-4 px-6 overflow-x-auto">
-              {[
-                "overview",
-                "users",
-                "events",
-                "services",
-                "resources",
-                "complaints",
-              ].map((tab) => (
+        {/* ── tab container ── */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          {/* tab strip */}
+          <div className="border-b border-gray-200 px-4 overflow-x-auto">
+            <div className="flex gap-0.5">
+              {TABS.map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`py-4 px-2 border-b-2 font-medium transition-colors whitespace-nowrap ${activeTab === tab
-                    ? "border-[#D7490C] text-[#D7490C]"
-                    : "border-transparent text-gray-600 hover:text-gray-900"
-                    }`}
+                  className={[
+                    "py-4 px-4 border-b-2 text-sm font-medium transition-colors whitespace-nowrap",
+                    activeTab === tab
+                      ? "border-[#D7490C] text-[#D7490C]"
+                      : "border-transparent text-gray-500 hover:text-gray-800",
+                  ].join(" ")}
                 >
                   {tab.charAt(0).toUpperCase() + tab.slice(1)}
                 </button>
@@ -659,724 +616,164 @@ const AdminDashboard = () => {
           </div>
 
           <div className="p-6">
-            {/* Overview Tab */}
+            {/* ── Overview ── */}
             {activeTab === "overview" && (
-              <div className="space-y-6">
+              <div className="space-y-7">
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                    Pending Actions
-                  </h2>
+                  <h2 className="text-lg font-bold text-gray-900 mb-4">Pending Actions</h2>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="p-4 border-l-4 border-yellow-500 bg-yellow-50 rounded">
-                      <div className="text-2xl font-bold text-yellow-700">
-                        {stats.pendingUsers}
+                    {[
+                      ["border-yellow-400 bg-yellow-50 text-yellow-700", stats.pendingUsers,   "Users awaiting verification"],
+                      ["border-orange-400 bg-orange-50 text-orange-700", stats.pendingEvents,  "Events pending approval"],
+                      ["border-purple-400 bg-purple-50 text-purple-700", stats.pendingServices + stats.pendingResources, "Services & resources pending"],
+                    ].map(([cls, n, label]) => (
+                      <div key={label} className={`border-l-4 rounded-lg p-4 ${cls}`}>
+                        <p className="text-3xl font-bold">{n}</p>
+                        <p className="text-sm mt-1 text-gray-600">{label}</p>
                       </div>
-                      <div className="text-sm text-gray-700">
-                        Users awaiting verification
-                      </div>
-                    </div>
-                    <div className="p-4 border-l-4 border-orange-500 bg-orange-50 rounded">
-                      <div className="text-2xl font-bold text-orange-700">
-                        {stats.pendingEvents}
-                      </div>
-                      <div className="text-sm text-gray-700">
-                        Events pending approval
-                      </div>
-                    </div>
-                    <div className="p-4 border-l-4 border-red-500 bg-red-50 rounded">
-                      <div className="text-2xl font-bold text-red-700">
-                        {stats.activeComplaints}
-                      </div>
-                      <div className="text-sm text-gray-700">
-                        Active complaints
-                      </div>
-                    </div>
+                    ))}
                   </div>
                 </div>
+
+                {pendingUserRows.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold text-gray-700 mb-3">
+                      Pending Users{" "}
+                      <span className="text-[#D7490C]">({pendingUserRows.length})</span>
+                    </h3>
+                    <DataTable
+                      columns={userColumns}
+                      data={pendingUserRows}
+                      actions={userActions}
+                      searchable={false}
+                      pageSize={5}
+                      emptyMessage="No pending users"
+                    />
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Users Tab */}
+            {/* ── Users ── */}
             {activeTab === "users" && (
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">
-                  Pending User Approvals
-                </h2>
-                {pendingUsers.length === 0 ? (
-                  <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
-                    <CheckCircle className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-1">
-                      No pending approvals
-                    </h3>
-                    <p className="text-gray-600">
-                      All users have been reviewed.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {pendingUsers.map((user) => (
-                      <div
-                        key={user._id}
-                        className="border border-gray-200 rounded-lg p-6 bg-white"
-                      >
-                        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <div className="w-12 h-12 rounded-full bg-gradient-to-r from-[#B7410E] to-[#D7490C] flex items-center justify-center text-white font-bold text-xl">
-                                {user.name.charAt(0).toUpperCase()}
-                              </div>
-                              <div>
-                                <h3 className="text-xl font-bold text-gray-900">
-                                  {user.name}
-                                </h3>
-                                <span
-                                  className={`text-xs px-2 py-1 rounded-full ${user.role === "provider"
-                                    ? "bg-blue-100 text-blue-700"
-                                    : "bg-green-100 text-green-700"
-                                    }`}
-                                >
-                                  {user.role}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="space-y-1 text-sm text-gray-600 mb-4">
-                              <div>
-                                <strong>Email:</strong> {user.email}
-                              </div>
-                              <div>
-                                <strong>Phone:</strong> {user.phone}
-                              </div>
-                              <div>
-                                <strong>City:</strong> {user.city}
-                              </div>
-                              {user.address && (
-                                <div>
-                                  <strong>Address:</strong> {user.address}
-                                </div>
-                              )}
-                              {user.providerInfo && user.role === "provider" && (
-    <>
-        <div className="mt-2 pt-2 border-t border-gray-200">
-            <strong>Business Info:</strong>
-        </div>
-        <div>
-            Business Name: {user.providerInfo.businessName}
-        </div>
-        {user.providerInfo.cnic && (
-            <div className="flex items-center gap-2">
-                <strong>CNIC:</strong>{" "}
-                <span className="font-mono tracking-widest bg-gray-100 px-2 py-0.5 rounded text-gray-800">
-                    {user.providerInfo.cnic}
-                </span>
-            </div>
-        )}
-        {user.providerInfo.description && (
-            <div>
-                Description: {user.providerInfo.description}
-            </div>
-        )}
-        {user.providerInfo.experience && (
-            <div>
-                Experience: {user.providerInfo.experience} years
-            </div>
-        )}
-    </>
-)}
-                              <div className="text-xs text-gray-500 mt-2">
-                                Registered:{" "}
-                                {new Date(user.createdAt).toLocaleString()}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() =>
-                                handleApproveUser(user._id, user.name)
-                              }
-                              disabled={actionLoading === user._id}
-                              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-                            >
-                              <Check className="w-4 h-4" />
-                              Approve
-                            </button>
-                            <button
-                              onClick={() => openRejectModal(user)}
-                              disabled={actionLoading === user._id}
-                              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
-                            >
-                              <X className="w-4 h-4" />
-                              Reject
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h2 className="text-lg font-bold text-gray-900">All Users</h2>
+                  <SubFilter
+                    value={userFilter}
+                    onChange={setUserFilter}
+                    counts={countBy(allUsers, "_status")}
+                  />
+                </div>
+                <DataTable
+                  columns={userColumns}
+                  data={byStatus(allUsers, userFilter, "_status")}
+                  actions={userActions}
+                  searchable
+                  searchPlaceholder="Search name, email, city…"
+                  searchKeys={["name","email","phone","city","role"]}
+                  pageSize={10}
+                  emptyIcon={<Users className="w-12 h-12" />}
+                  emptyMessage="No users match your filter."
+                />
               </div>
             )}
 
-            {/* Events Tab */}
+            {/* ── Events ── */}
             {activeTab === "events" && (
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">
-                  Pending Event Approvals ({pendingEvents.length})
-                </h2>
-
-                {pendingEvents.length === 0 ? (
-                  <div className="text-center py-12 bg-gray-50 rounded-lg">
-                    <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600">
-                      No pending events for approval
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {pendingEvents.map((event) => (
-                      <div
-                        key={event._id}
-                        className="border border-gray-200 rounded-lg p-6 hover:shadow-lg transition-shadow"
-                      >
-                        <div className="flex flex-col lg:flex-row gap-4">
-                          {event.images && event.images.length > 0 && (
-                            <img
-                              src={event.images[0].url}
-                              alt={event.title}
-                              className="w-full lg:w-48 h-32 object-cover rounded-lg"
-                            />
-                          )}
-                          <div className="flex-1">
-                            <div className="flex items-start justify-between mb-2">
-                              <div>
-                                <h3 className="text-xl font-bold text-gray-900 mb-1">
-                                  {event.title}
-                                </h3>
-                                <span className="inline-block px-2 py-1 text-xs bg-orange-100 text-orange-700 rounded-full">
-                                  {event.category}
-                                </span>
-                              </div>
-                            </div>
-
-                            <p className="text-sm text-gray-600 mb-3 line-clamp-2">
-                              {event.description}
-                            </p>
-
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-gray-600 mb-4">
-                              <div>
-                                <span className="font-medium">Provider:</span>{" "}
-                                {event.provider?.name || "N/A"}
-                              </div>
-                              <div>
-                                <span className="font-medium">Venue:</span>{" "}
-                                {event.venue}
-                              </div>
-                              <div>
-                                <span className="font-medium">Location:</span>{" "}
-                                {event.location?.city || "N/A"}
-                              </div>
-                              <div>
-                                <span className="font-medium">Capacity:</span>{" "}
-                                {event.capacity} guests
-                              </div>
-                              <div>
-                                <span className="font-medium">Price:</span> PKR{" "}
-                                {event.charges?.toLocaleString() || "N/A"}
-                              </div>
-                              <div>
-                                <span className="font-medium">Submitted:</span>{" "}
-                                {new Date(event.createdAt).toLocaleDateString()}
-                              </div>
-                            </div>
-
-                            <div className="flex gap-2 flex-wrap">
-                              <button
-                                onClick={() =>
-                                  handleApproveItem(
-                                    "event",
-                                    event._id,
-                                    event.title
-                                  )
-                                }
-                                disabled={actionLoading === event._id}
-                                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-                              >
-                                <Check className="w-4 h-4" />
-                                {actionLoading === event._id
-                                  ? "Approving..."
-                                  : "Approve & Publish"}
-                              </button>
-                              <button
-                                onClick={() =>
-                                  openRejectItemModal("event", event)
-                                }
-                                disabled={actionLoading === event._id}
-                                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
-                              >
-                                <X className="w-4 h-4" />
-                                Reject
-                              </button>
-                              {/* <button className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-                                <Eye className="w-4 h-4" />
-                                View Details
-                              </button> */}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h2 className="text-lg font-bold text-gray-900">All Events</h2>
+                  <SubFilter
+                    value={eventFilter}
+                    onChange={setEventFilter}
+                    counts={countBy(allEvents)}
+                  />
+                </div>
+                <DataTable
+                  columns={eventColumns}
+                  data={byStatus(allEvents, eventFilter)}
+                  actions={eventActions}
+                  searchable
+                  searchPlaceholder="Search title, category, venue…"
+                  searchKeys={["title","category","venue"]}
+                  pageSize={10}
+                  emptyIcon={<Calendar className="w-12 h-12" />}
+                  emptyMessage="No events match your filter."
+                />
               </div>
             )}
 
-            {/* Services Tab */}
+            {/* ── Services ── */}
             {activeTab === "services" && (
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">
-                  Pending Service Approvals ({pendingServices.length})
-                </h2>
-
-                {pendingServices.length === 0 ? (
-                  <div className="text-center py-12 bg-gray-50 rounded-lg">
-                    <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600">
-                      No pending services for approval
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {pendingServices.map((service) => (
-                      <div
-                        key={service._id}
-                        className="border border-gray-200 rounded-lg p-6 hover:shadow-lg transition-shadow"
-                      >
-                        <div className="flex flex-col lg:flex-row gap-4">
-                          {service.images && service.images.length > 0 && (
-                            <img
-                              src={service.images[0].url}
-                              alt={service.title}
-                              className="w-full lg:w-48 h-32 object-cover rounded-lg"
-                            />
-                          )}
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <h3 className="text-xl font-bold text-gray-900">
-                                {service.title}
-                              </h3>
-                              <span className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded-full">
-                                {service.category}
-                              </span>
-                            </div>
-
-                            <p className="text-sm text-gray-600 mb-3 line-clamp-2">
-                              {service.description}
-                            </p>
-
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-gray-600 mb-4">
-                              <div>
-                                <span className="font-medium">Provider:</span>{" "}
-                                {service.provider?.name || "N/A"}
-                              </div>
-                              <div>
-                                <span className="font-medium">Location:</span>{" "}
-                                {service.location?.city || "N/A"}
-                              </div>
-                              <div>
-                                <span className="font-medium">Price:</span> PKR{" "}
-                                {service.pricing?.basePrice?.toLocaleString() ||
-                                  "N/A"}
-                              </div>
-                              <div>
-                                <span className="font-medium">Submitted:</span>{" "}
-                                {new Date(
-                                  service.createdAt
-                                ).toLocaleDateString()}
-                              </div>
-                            </div>
-
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() =>
-                                  handleApproveItem(
-                                    "service",
-                                    service._id,
-                                    service.title
-                                  )
-                                }
-                                disabled={actionLoading === service._id}
-                                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-                              >
-                                <Check className="w-4 h-4" />
-                                {actionLoading === service._id
-                                  ? "Approving..."
-                                  : "Approve"}
-                              </button>
-                              <button
-                                onClick={() =>
-                                  openRejectItemModal("service", service)
-                                }
-                                disabled={actionLoading === service._id}
-                                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
-                              >
-                                <X className="w-4 h-4" />
-                                Reject
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h2 className="text-lg font-bold text-gray-900">All Services</h2>
+                  <SubFilter
+                    value={serviceFilter}
+                    onChange={setServiceFilter}
+                    counts={countBy(allServices)}
+                  />
+                </div>
+                <DataTable
+                  columns={serviceColumns}
+                  data={byStatus(allServices, serviceFilter)}
+                  actions={serviceActions}
+                  searchable
+                  searchPlaceholder="Search title, category…"
+                  searchKeys={["title","category"]}
+                  pageSize={10}
+                  emptyIcon={<Package className="w-12 h-12" />}
+                  emptyMessage="No services match your filter."
+                />
               </div>
             )}
 
-            {/* Resources Tab */}
+            {/* ── Resources ── */}
             {activeTab === "resources" && (
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">
-                  Pending Resource Approvals ({pendingResources.length})
-                </h2>
-
-                {pendingResources.length === 0 ? (
-                  <div className="text-center py-12 bg-gray-50 rounded-lg">
-                    <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600">
-                      No pending resources for approval
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {pendingResources.map((resource) => (
-                      <div
-                        key={resource._id}
-                        className="border border-gray-200 rounded-lg p-6 hover:shadow-lg transition-shadow"
-                      >
-                        <div className="flex flex-col lg:flex-row gap-4">
-                          {resource.images && resource.images.length > 0 && (
-                            <img
-                              src={resource.images[0].url}
-                              alt={resource.name}
-                              className="w-full lg:w-48 h-32 object-cover rounded-lg"
-                            />
-                          )}
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <h3 className="text-xl font-bold text-gray-900">
-                                {resource.name}
-                              </h3>
-                              <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full">
-                                {resource.category}
-                              </span>
-                            </div>
-
-                            <p className="text-sm text-gray-600 mb-3 line-clamp-2">
-                              {resource.description}
-                            </p>
-
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-gray-600 mb-4">
-                              <div>
-                                <span className="font-medium">Provider:</span>{" "}
-                                {resource.provider?.name || "N/A"}
-                              </div>
-                              <div>
-                                <span className="font-medium">Location:</span>{" "}
-                                {resource.location?.city || "N/A"}
-                              </div>
-                              <div>
-                                <span className="font-medium">
-                                  Rental Price:
-                                </span>{" "}
-                                PKR{" "}
-                                {resource.rentalPrice?.toLocaleString() ||
-                                  "N/A"}
-                              </div>
-                              <div>
-                                <span className="font-medium">
-                                  Available Quantity:
-                                </span>{" "}
-                                {resource.availableQuantity || 0}
-                              </div>
-                              <div>
-                                <span className="font-medium">Submitted:</span>{" "}
-                                {new Date(
-                                  resource.createdAt
-                                ).toLocaleDateString()}
-                              </div>
-                            </div>
-
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() =>
-                                  handleApproveItem(
-                                    "resource",
-                                    resource._id,
-                                    resource.name
-                                  )
-                                }
-                                disabled={actionLoading === resource._id}
-                                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-                              >
-                                <Check className="w-4 h-4" />
-                                {actionLoading === resource._id
-                                  ? "Approving..."
-                                  : "Approve"}
-                              </button>
-                              <button
-                                onClick={() =>
-                                  openRejectItemModal("resource", resource)
-                                }
-                                disabled={actionLoading === resource._id}
-                                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
-                              >
-                                <X className="w-4 h-4" />
-                                Reject
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h2 className="text-lg font-bold text-gray-900">All Resources</h2>
+                  <SubFilter
+                    value={resourceFilter}
+                    onChange={setResourceFilter}
+                    counts={countBy(allResources)}
+                  />
+                </div>
+                <DataTable
+                  columns={resourceColumns}
+                  data={byStatus(allResources, resourceFilter)}
+                  actions={resourceActions}
+                  searchable
+                  searchPlaceholder="Search name, category…"
+                  searchKeys={["name","category"]}
+                  pageSize={10}
+                  emptyIcon={<Package className="w-12 h-12" />}
+                  emptyMessage="No resources match your filter."
+                />
               </div>
             )}
 
-            {/* Complaints Tab */}
+            {/* ── Complaints ── */}
             {activeTab === "complaints" && (
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">
-                  Active Complaints & Disputes
-                </h2>
-                <div className="space-y-4">
-                  {complaints.map((complaint) => (
-                    <div
-                      key={complaint.id}
-                      className="border border-gray-200 rounded-lg p-6"
-                    >
-                      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <h3 className="text-xl font-bold text-gray-900">
-                              Complaint #{complaint.id}
-                            </h3>
-                            <span
-                              className={`text-xs px-2 py-1 rounded-full ${complaint.priority === "High"
-                                ? "bg-red-100 text-red-700"
-                                : "bg-yellow-100 text-yellow-700"
-                                }`}
-                            >
-                              {complaint.priority} Priority
-                            </span>
-                            <span
-                              className={`text-xs px-2 py-1 rounded-full ${complaint.status === "Open"
-                                ? "bg-orange-100 text-orange-700"
-                                : "bg-blue-100 text-blue-700"
-                                }`}
-                            >
-                              {complaint.status}
-                            </span>
-                          </div>
-                          <div className="space-y-2 text-sm mb-3">
-                            <div className="flex gap-4">
-                              <span className="text-gray-600">Filed by:</span>
-                              <span className="font-semibold text-gray-900">
-                                {complaint.complaintBy}
-                              </span>
-                            </div>
-                            <div className="flex gap-4">
-                              <span className="text-gray-600">Against:</span>
-                              <span className="font-semibold text-gray-900">
-                                {complaint.complaintAgainst}
-                              </span>
-                            </div>
-                            <div className="flex gap-4">
-                              <span className="text-gray-600">Type:</span>
-                              <span className="text-gray-900">
-                                {complaint.type}
-                              </span>
-                            </div>
-                            <div className="flex gap-4">
-                              <span className="text-gray-600">Reason:</span>
-                              <span className="text-gray-900">
-                                {complaint.reason}
-                              </span>
-                            </div>
-                            <div className="flex gap-4">
-                              <span className="text-gray-600">Submitted:</span>
-                              <span className="text-gray-900">
-                                {new Date(
-                                  complaint.submittedDate
-                                ).toLocaleDateString()}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                            Investigate
-                          </button>
-                          <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
-                            Resolve
-                          </button>
-                          <button className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
-                            Block User
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              <div className="py-20 text-center text-gray-400">
+                <AlertCircle className="w-14 h-14 mx-auto mb-4 opacity-20" />
+                <p className="text-sm">Complaints module coming soon.</p>
               </div>
             )}
           </div>
         </div>
-      </div>
+      </main>
 
-      {/* Reject Modal */}
-      {showRejectModal && (
-        <div className="fixed z-[9999] inset-0 overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div
-              className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
-              onClick={() => {
-                setShowRejectModal(false);
-                setRejectionReason("");
-              }}
-            ></div>
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full relative z-[10000]">
-              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                <div className="sm:flex sm:items-start">
-                  <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
-                    <XCircle className="h-6 w-6 text-red-600" />
-                  </div>
-                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left flex-1">
-                    <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
-                      Reject User: {selectedUser?.name}
-                    </h3>
-                    <div className="mt-2">
-                      <p className="text-sm text-gray-500 mb-3">
-                        Please provide a clear reason for rejecting this user.
-                        This will be visible to the user.
-                      </p>
-                      <textarea
-                        className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-[#D7490C] focus:border-transparent resize-none bg-white text-gray-900"
-                        rows="4"
-                        placeholder="Enter rejection reason (minimum 10 characters)..."
-                        value={rejectionReason}
-                        onChange={(e) => setRejectionReason(e.target.value)}
-                        maxLength={500}
-                        autoFocus
-                      ></textarea>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {rejectionReason.length}/500 characters
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                <button
-                  type="button"
-                  onClick={handleRejectUser}
-                  disabled={actionLoading || rejectionReason.length < 10}
-                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {actionLoading ? "Rejecting..." : "Confirm Rejection"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowRejectModal(false);
-                    setSelectedUser(null);
-                    setRejectionReason("");
-                  }}
-                  disabled={actionLoading}
-                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Reject Item Modal (Events/Services/Resources) */}
-      {showRejectItemModal && (
-        <div className="fixed z-[9999] inset-0 overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div
-              className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
-              onClick={() => {
-                setShowRejectItemModal(false);
-                setItemRejectionReason("");
-                setSelectedItem(null);
-                setItemType("");
-              }}
-            ></div>
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full relative z-[10000]">
-              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                <div className="sm:flex sm:items-start">
-                  <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
-                    <XCircle className="h-6 w-6 text-red-600" />
-                  </div>
-                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left flex-1">
-                    <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
-                      Reject{" "}
-                      {itemType.charAt(0).toUpperCase() + itemType.slice(1)}:{" "}
-                      {selectedItem?.title || selectedItem?.name}
-                    </h3>
-                    <div className="mt-2">
-                      <p className="text-sm text-gray-500 mb-3">
-                        Please provide a clear reason for rejecting this{" "}
-                        {itemType}. This will be sent to the provider.
-                      </p>
-                      <textarea
-                        className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-[#D7490C] focus:border-transparent resize-none bg-white text-gray-900"
-                        rows="4"
-                        placeholder="Enter rejection reason (minimum 10 characters)..."
-                        value={itemRejectionReason}
-                        onChange={(e) => setItemRejectionReason(e.target.value)}
-                        maxLength={500}
-                        autoFocus
-                      ></textarea>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {itemRejectionReason.length}/500 characters
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                <button
-                  type="button"
-                  onClick={handleRejectItem}
-                  disabled={actionLoading || itemRejectionReason.length < 10}
-                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {actionLoading ? "Rejecting..." : "Confirm Rejection"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowRejectItemModal(false);
-                    setSelectedItem(null);
-                    setItemRejectionReason("");
-                    setItemType("");
-                  }}
-                  disabled={actionLoading}
-                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* ── Reject Modal ── */}
+      {rejectTarget && (
+        <RejectModal
+          title={`Reject ${rejectTarget.type}: ${rejectTarget.row.name ?? rejectTarget.row.title ?? ""}`}
+          onConfirm={reject}
+          onCancel={() => setRejectTarget(null)}
+          loading={!!busyId}
+        />
       )}
     </div>
   );
-};
-
-export default AdminDashboard;
+}
