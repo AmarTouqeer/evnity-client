@@ -20,7 +20,7 @@ const api = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 const authGet = async (path) => {
   const token = localStorage.getItem("token");
-  const res   = await fetch(`${api}${path}`, {
+  const res = await fetch(`${api}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`GET ${path} failed (${res.status})`);
@@ -29,7 +29,7 @@ const authGet = async (path) => {
 
 const authPost = async (path, body = {}) => {
   const token = localStorage.getItem("token");
-  const res   = await fetch(`${api}${path}`, {
+  const res = await fetch(`${api}${path}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -45,16 +45,15 @@ const money = (n, d = 2) =>
 
 /* ── status badge ── */
 const STATUS_CFG = {
-  pending:  "bg-yellow-100 text-yellow-700",
+  pending: "bg-yellow-100 text-yellow-700",
   approved: "bg-emerald-100 text-emerald-700",
   rejected: "bg-rose-100 text-rose-700",
-  published:"bg-sky-100 text-sky-700",
+  published: "bg-sky-100 text-sky-700",
 };
 const Badge = ({ status }) => (
   <span
-    className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full capitalize ${
-      STATUS_CFG[status] ?? "bg-gray-100 text-gray-500"
-    }`}
+    className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full capitalize ${STATUS_CFG[status] ?? "bg-gray-100 text-gray-500"
+      }`}
   >
     {status ?? "—"}
   </span>
@@ -63,9 +62,8 @@ const Badge = ({ status }) => (
 /* ── role badge ── */
 const RoleBadge = ({ role }) => (
   <span
-    className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full capitalize ${
-      role === "provider" ? "bg-blue-100 text-blue-700" : "bg-green-100 text-green-700"
-    }`}
+    className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full capitalize ${role === "provider" ? "bg-blue-100 text-blue-700" : "bg-green-100 text-green-700"
+      }`}
   >
     {role}
   </span>
@@ -74,8 +72,8 @@ const RoleBadge = ({ role }) => (
 /* ── sub-filter strip ── */
 const SubFilter = ({ value, onChange, counts }) => {
   const opts = [
-    { key: "all",      label: "All"      },
-    { key: "pending",  label: "Pending"  },
+    { key: "all", label: "All" },
+    { key: "pending", label: "Pending" },
     { key: "approved", label: "Approved" },
     { key: "rejected", label: "Rejected" },
   ];
@@ -85,17 +83,15 @@ const SubFilter = ({ value, onChange, counts }) => {
         <button
           key={key}
           onClick={() => onChange(key)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-            value === key
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${value === key
               ? "bg-white shadow text-[#D7490C]"
               : "text-gray-500 hover:text-gray-800"
-          }`}
+            }`}
         >
           {label}
           <span
-            className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-              value === key ? "bg-orange-100 text-[#D7490C]" : "bg-gray-200 text-gray-500"
-            }`}
+            className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${value === key ? "bg-orange-100 text-[#D7490C]" : "bg-gray-200 text-gray-500"
+              }`}
           >
             {counts[key] ?? 0}
           </span>
@@ -176,24 +172,24 @@ const RejectModal = ({ title, onConfirm, onCancel, loading }) => {
 export default function AdminDashboard() {
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab]       = useState("overview");
-  const [isLoading, setIsLoading]       = useState(true);
-  const [error,     setError]           = useState("");
-  const [busyId,    setBusyId]          = useState(null);   // row being actioned
+  const [activeTab, setActiveTab] = useState("overview");
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [busyId, setBusyId] = useState(null);   // row being actioned
 
   /* sub-filters */
-  const [userFilter,     setUserFilter]     = useState("all");
-  const [eventFilter,    setEventFilter]    = useState("all");
-  const [serviceFilter,  setServiceFilter]  = useState("all");
+  const [userFilter, setUserFilter] = useState("all");
+  const [eventFilter, setEventFilter] = useState("all");
+  const [serviceFilter, setServiceFilter] = useState("all");
   const [resourceFilter, setResourceFilter] = useState("all");
 
   /* reject modal state */
   const [rejectTarget, setRejectTarget] = useState(null); // { type, row }
 
   /* data */
-  const [allUsers,     setAllUsers]     = useState([]);
-  const [allEvents,    setAllEvents]    = useState([]);
-  const [allServices,  setAllServices]  = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
+  const [allEvents, setAllEvents] = useState([]);
+  const [allServices, setAllServices] = useState([]);
   const [allResources, setAllResources] = useState([]);
 
   const [stats, setStats] = useState({
@@ -208,7 +204,7 @@ export default function AdminDashboard() {
   /* ── auth guard ── */
   useEffect(() => {
     const token = localStorage.getItem("token");
-    const user  = JSON.parse(localStorage.getItem("user") || "{}");
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
     if (!token || user.role !== "admin") { navigate("/admin/login"); return; }
     load();
   }, []);
@@ -237,55 +233,66 @@ export default function AdminDashboard() {
 
     const pendUsers = pend?.data?.users ?? [];
     const apprUsers = appr?.data?.users ?? [];
-    const rejUsers  = rej?.data?.users  ?? [];
+    const rejUsers = rej?.data?.users ?? [];
 
     setAllUsers([
-      ...pendUsers.map((u) => ({ ...u, _status: "pending"  })),
+      ...pendUsers.map((u) => ({ ...u, _status: "pending" })),
       ...apprUsers.map((u) => ({ ...u, _status: "approved" })),
-      ...rejUsers .map((u) => ({ ...u, _status: "rejected" })),
+      ...rejUsers.map((u) => ({ ...u, _status: "rejected" })),
     ]);
 
     /* events */
-    const [allEv, pendEv] = await Promise.all([
-      settled(() => authGet("/events?limit=1000")),
+    const [pendEv, apprEv, rejEv] = await Promise.all([
       settled(() => authGet("/events?adminApprovalStatus=pending&limit=500")),
+      settled(() => authGet("/events?adminApprovalStatus=approved&limit=500")),
+      settled(() => authGet("/events?adminApprovalStatus=rejected&limit=500")),
     ]);
-    const evArr  = allEv?.data?.events  ?? allEv?.data  ?? [];
-    const pevArr = pendEv?.data?.events ?? pendEv?.data ?? [];
+    const pendEvArr = pendEv?.data?.events ?? [];
+    const apprEvArr = apprEv?.data?.events ?? [];
+    const rejEvArr = rejEv?.data?.events ?? [];
+    const evArr = [...pendEvArr, ...apprEvArr, ...rejEvArr];
     setAllEvents(evArr);
-    setStats((s) => ({ ...s, totalEvents: evArr.length, pendingEvents: pevArr.length }));
+    setStats((s) => ({ ...s, totalEvents: evArr.length, pendingEvents: pendEvArr.length }))
 
     /* services */
-    const [allSv, pendSv] = await Promise.all([
-      settled(() => authGet("/services?limit=1000")),
+    const [pendSv, apprSv, rejSv] = await Promise.all([
       settled(() => authGet("/services?adminApprovalStatus=pending&limit=500")),
+      settled(() => authGet("/services?adminApprovalStatus=approved&limit=500")),
+      settled(() => authGet("/services?adminApprovalStatus=rejected&limit=500")),
     ]);
-    const svArr  = allSv?.data?.services  ?? allSv?.data  ?? [];
-    const psvArr = pendSv?.data?.services ?? pendSv?.data ?? [];
+    const svArr = [
+      ...(pendSv?.data?.services ?? []),
+      ...(apprSv?.data?.services ?? []),
+      ...(rejSv?.data?.services ?? []),
+    ];
     setAllServices(svArr);
-    setStats((s) => ({ ...s, totalServices: svArr.length, pendingServices: psvArr.length }));
+    setStats((s) => ({ ...s, totalServices: svArr.length, pendingServices: (pendSv?.data?.services ?? []).length }));
 
     /* resources */
-    const [allRs, pendRs] = await Promise.all([
-      settled(() => authGet("/resources?limit=1000")),
+    const [pendRs, apprRs, rejRs] = await Promise.all([
       settled(() => authGet("/resources?adminApprovalStatus=pending&limit=500")),
+      settled(() => authGet("/resources?adminApprovalStatus=approved&limit=500")),
+      settled(() => authGet("/resources?adminApprovalStatus=rejected&limit=500")),
     ]);
-    const rsArr  = allRs?.data?.resources  ?? allRs?.data  ?? [];
-    const prsArr = pendRs?.data?.resources ?? pendRs?.data ?? [];
+    const rsArr = [
+      ...(pendRs?.data?.resources ?? []),
+      ...(apprRs?.data?.resources ?? []),
+      ...(rejRs?.data?.resources ?? []),
+    ];
     setAllResources(rsArr);
-    setStats((s) => ({ ...s, totalResources: rsArr.length, pendingResources: prsArr.length }));
+    setStats((s) => ({ ...s, totalResources: rsArr.length, pendingResources: (pendRs?.data?.resources ?? []).length }));
 
     setIsLoading(false);
 
     /* revenue — non-blocking */
     try {
       const fees = await paymentAPI.getAdminDeductedFees();
-      const t    = fees.data?.totals ?? {};
+      const t = fees.data?.totals ?? {};
       setStats((s) => ({
         ...s,
-        totalRevenue:    t.totalDeductedFees    ?? 0,
-        totalBookings:   t.totalBookings        ?? 0,
-        grossRevenue:    t.totalGrossRevenue    ?? 0,
+        totalRevenue: t.totalDeductedFees ?? 0,
+        totalBookings: t.totalBookings ?? 0,
+        grossRevenue: t.totalGrossRevenue ?? 0,
         providerPayouts: t.totalPaidToProviders ?? 0,
       }));
     } catch { /* ignore */ }
@@ -296,9 +303,9 @@ export default function AdminDashboard() {
     if (!confirm(`Approve this ${type}?`)) return;
     setBusyId(row._id);
     const ep = {
-      user:     `/admin/approve-user/${row._id}`,
-      event:    `/admin/approve-event/${row._id}`,
-      service:  `/admin/approve-service/${row._id}`,
+      user: `/admin/approve-user/${row._id}`,
+      event: `/admin/approve-event/${row._id}`,
+      service: `/admin/approve-service/${row._id}`,
       resource: `/admin/approve-resource/${row._id}`,
     }[type];
     const res = await authPost(ep);
@@ -312,9 +319,9 @@ export default function AdminDashboard() {
     const { type, row } = rejectTarget;
     setBusyId(row._id);
     const ep = {
-      user:     `/admin/reject-user/${row._id}`,
-      event:    `/admin/reject-event/${row._id}`,
-      service:  `/admin/reject-service/${row._id}`,
+      user: `/admin/reject-user/${row._id}`,
+      event: `/admin/reject-event/${row._id}`,
+      service: `/admin/reject-service/${row._id}`,
       resource: `/admin/reject-resource/${row._id}`,
     }[type];
     const res = await authPost(ep, { reason });
@@ -340,8 +347,8 @@ export default function AdminDashboard() {
       : arr.filter((r) => (r[key] || r._status) === filter);
 
   const countBy = (arr, key = "adminApprovalStatus") => ({
-    all:      arr.length,
-    pending:  arr.filter((r) => (r[key] || r._status) === "pending").length,
+    all: arr.length,
+    pending: arr.filter((r) => (r[key] || r._status) === "pending").length,
     approved: arr.filter((r) => (r[key] || r._status) === "approved").length,
     rejected: arr.filter((r) => (r[key] || r._status) === "rejected").length,
   });
@@ -357,13 +364,14 @@ export default function AdminDashboard() {
         </div>
       ),
     },
-    { key: "name",  label: "Name",  sortable: true },
+    { key: "name", label: "Name", sortable: true },
     { key: "email", label: "Email", sortable: true },
     { key: "phone", label: "Phone" },
-    { key: "role",  label: "Role",  sortable: true,
+    {
+      key: "role", label: "Role", sortable: true,
       render: (r) => <RoleBadge role={r.role} />,
     },
-    { key: "city",  label: "City",  sortable: true },
+    { key: "city", label: "City", sortable: true },
     {
       key: "_status", label: "Status", sortable: true,
       render: (r) => <Badge status={r._status} />,
@@ -388,84 +396,102 @@ export default function AdminDashboard() {
 
   const eventColumns = [
     thumbCell("bg-orange-100 text-orange-400", Calendar),
-    { key: "title",    label: "Title",    sortable: true },
-    { key: "category", label: "Category", sortable: true,
+    { key: "title", label: "Title", sortable: true },
+    {
+      key: "category", label: "Category", sortable: true,
       render: (r) => (
         <span className="text-[11px] px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full font-medium">
           {r.category}
         </span>
       ),
     },
-    { key: "provider.name", label: "Provider", sortable: true,
+    {
+      key: "provider.name", label: "Provider", sortable: true,
       render: (r) => r.provider?.name ?? "—",
     },
-    { key: "location.city", label: "City", sortable: true,
+    {
+      key: "location.city", label: "City", sortable: true,
       render: (r) => r.location?.city ?? "—",
     },
-    { key: "venue",    label: "Venue" },
+    { key: "venue", label: "Venue" },
     { key: "capacity", label: "Capacity", sortable: true },
-    { key: "charges",  label: "Price",    sortable: true,
+    {
+      key: "charges", label: "Price", sortable: true,
       render: (r) => r.charges ? `PKR ${Number(r.charges).toLocaleString()}` : "—",
     },
-    { key: "adminApprovalStatus", label: "Status", sortable: true,
+    {
+      key: "adminApprovalStatus", label: "Status", sortable: true,
       render: (r) => <Badge status={r.adminApprovalStatus} />,
     },
-    { key: "createdAt", label: "Date", sortable: true,
+    {
+      key: "createdAt", label: "Date", sortable: true,
       render: (r) => new Date(r.createdAt).toLocaleDateString(),
     },
   ];
 
   const serviceColumns = [
     thumbCell("bg-purple-100 text-purple-400", Package),
-    { key: "title",    label: "Title",    sortable: true },
-    { key: "category", label: "Category", sortable: true,
+    { key: "title", label: "Title", sortable: true },
+    {
+      key: "category", label: "Category", sortable: true,
       render: (r) => (
         <span className="text-[11px] px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full font-medium">
           {r.category}
         </span>
       ),
     },
-    { key: "provider.name", label: "Provider", sortable: true,
+    {
+      key: "provider.name", label: "Provider", sortable: true,
       render: (r) => r.provider?.name ?? "—",
     },
-    { key: "location.city", label: "City", sortable: true,
+    {
+      key: "location.city", label: "City", sortable: true,
       render: (r) => r.location?.city ?? "—",
     },
-    { key: "pricing.basePrice", label: "Base Price", sortable: true,
+    {
+      key: "pricing.basePrice", label: "Base Price", sortable: true,
       render: (r) => r.pricing?.basePrice ? `PKR ${Number(r.pricing.basePrice).toLocaleString()}` : "—",
     },
-    { key: "adminApprovalStatus", label: "Status", sortable: true,
+    {
+      key: "adminApprovalStatus", label: "Status", sortable: true,
       render: (r) => <Badge status={r.adminApprovalStatus} />,
     },
-    { key: "createdAt", label: "Date", sortable: true,
+    {
+      key: "createdAt", label: "Date", sortable: true,
       render: (r) => new Date(r.createdAt).toLocaleDateString(),
     },
   ];
 
   const resourceColumns = [
     thumbCell("bg-emerald-100 text-emerald-400", Package),
-    { key: "name",     label: "Name",     sortable: true },
-    { key: "category", label: "Category", sortable: true,
+    { key: "name", label: "Name", sortable: true },
+    {
+      key: "category", label: "Category", sortable: true,
       render: (r) => (
         <span className="text-[11px] px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full font-medium">
           {r.category}
         </span>
       ),
     },
-    { key: "provider.name", label: "Provider", sortable: true,
+    {
+      key: "provider.name", label: "Provider", sortable: true,
       render: (r) => r.provider?.name ?? "—",
     },
-    { key: "location.city", label: "City", sortable: true,
+    {
+      key: "location.city", label: "City", sortable: true,
       render: (r) => r.location?.city ?? "—",
     },
-    { key: "rentalPrice", label: "Rental Price", sortable: true,
+    {
+      key: "rentalPrice", label: "Rental Price", sortable: true,
       render: (r) => r.rentalPrice ? `PKR ${Number(r.rentalPrice).toLocaleString()}` : "—",
     },
     { key: "availableQuantity", label: "Qty", sortable: true },
-    { key: "adminApprovalStatus", label: "Status", sortable: true,
+    {
+      key: "adminApprovalStatus", label: "Status", sortable: true,
       render: (r) => <Badge status={r.adminApprovalStatus} />,
     },
-    { key: "createdAt", label: "Date", sortable: true,
+    {
+      key: "createdAt", label: "Date", sortable: true,
       render: (r) => new Date(r.createdAt).toLocaleDateString(),
     },
   ];
@@ -477,26 +503,26 @@ export default function AdminDashboard() {
       color: "green",
       icon: <Check className="w-3.5 h-3.5" />,
       disabled: (r) => (r[statusKey] || r._status) !== "pending",
-      loading:  (r) => busyId === r._id,
-      onClick:  (r) => approve(type, r),
+      loading: (r) => busyId === r._id,
+      onClick: (r) => approve(type, r),
     },
     {
       label: "Reject",
       color: "red",
       icon: <X className="w-3.5 h-3.5" />,
       disabled: (r) => (r[statusKey] || r._status) !== "pending",
-      loading:  (r) => busyId === r._id,
-      onClick:  (r) => setRejectTarget({ type, row: r }),
+      loading: (r) => busyId === r._id,
+      onClick: (r) => setRejectTarget({ type, row: r }),
     },
   ];
 
-  const userActions  = makeActions("user",     "_status");
+  const userActions = makeActions("user", "_status");
   const eventActions = makeActions("event");
-  const serviceActions  = makeActions("service");
+  const serviceActions = makeActions("service");
   const resourceActions = makeActions("resource");
 
   /* ── tabs config ── */
-  const TABS = ["overview","users","events","services","resources","complaints"];
+  const TABS = ["overview", "users", "events", "services", "resources", "complaints"];
 
   if (isLoading) {
     return (
@@ -579,9 +605,9 @@ export default function AdminDashboard() {
           </div>
           <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-3 gap-4 text-xs">
             {[
-              ["Total Bookings",   stats.totalBookings,   false],
-              ["Gross Processed",  stats.grossRevenue,    true ],
-              ["Paid to Providers",stats.providerPayouts, true ],
+              ["Total Bookings", stats.totalBookings, false],
+              ["Gross Processed", stats.grossRevenue, true],
+              ["Paid to Providers", stats.providerPayouts, true],
             ].map(([label, val, isMoney]) => (
               <div key={label}>
                 <p className="text-gray-400">{label}</p>
@@ -623,8 +649,8 @@ export default function AdminDashboard() {
                   <h2 className="text-lg font-bold text-gray-900 mb-4">Pending Actions</h2>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {[
-                      ["border-yellow-400 bg-yellow-50 text-yellow-700", stats.pendingUsers,   "Users awaiting verification"],
-                      ["border-orange-400 bg-orange-50 text-orange-700", stats.pendingEvents,  "Events pending approval"],
+                      ["border-yellow-400 bg-yellow-50 text-yellow-700", stats.pendingUsers, "Users awaiting verification"],
+                      ["border-orange-400 bg-orange-50 text-orange-700", stats.pendingEvents, "Events pending approval"],
                       ["border-purple-400 bg-purple-50 text-purple-700", stats.pendingServices + stats.pendingResources, "Services & resources pending"],
                     ].map(([cls, n, label]) => (
                       <div key={label} className={`border-l-4 rounded-lg p-4 ${cls}`}>
@@ -671,7 +697,7 @@ export default function AdminDashboard() {
                   actions={userActions}
                   searchable
                   searchPlaceholder="Search name, email, city…"
-                  searchKeys={["name","email","phone","city","role"]}
+                  searchKeys={["name", "email", "phone", "city", "role"]}
                   pageSize={10}
                   emptyIcon={<Users className="w-12 h-12" />}
                   emptyMessage="No users match your filter."
@@ -696,7 +722,7 @@ export default function AdminDashboard() {
                   actions={eventActions}
                   searchable
                   searchPlaceholder="Search title, category, venue…"
-                  searchKeys={["title","category","venue"]}
+                  searchKeys={["title", "category", "venue"]}
                   pageSize={10}
                   emptyIcon={<Calendar className="w-12 h-12" />}
                   emptyMessage="No events match your filter."
@@ -721,7 +747,7 @@ export default function AdminDashboard() {
                   actions={serviceActions}
                   searchable
                   searchPlaceholder="Search title, category…"
-                  searchKeys={["title","category"]}
+                  searchKeys={["title", "category"]}
                   pageSize={10}
                   emptyIcon={<Package className="w-12 h-12" />}
                   emptyMessage="No services match your filter."
@@ -746,7 +772,7 @@ export default function AdminDashboard() {
                   actions={resourceActions}
                   searchable
                   searchPlaceholder="Search name, category…"
-                  searchKeys={["name","category"]}
+                  searchKeys={["name", "category"]}
                   pageSize={10}
                   emptyIcon={<Package className="w-12 h-12" />}
                   emptyMessage="No resources match your filter."
