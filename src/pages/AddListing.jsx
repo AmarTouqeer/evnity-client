@@ -126,13 +126,9 @@ const AddListing = () => {
     }));
   };
 
-  const handleStripeCurrencyChange = (e) => {
-    const value = e.target.value.toLowerCase();
-    setPaymentOptions((prev) => ({
-      ...prev,
-      stripe: { ...prev.stripe, currency: value || "pkr" },
-    }));
-  };
+ const handleStripeCurrencyChange = (_e) => {
+  // Currency is fixed to PKR for this platform
+};
 
   const handleManualToggle = () => {
     setPaymentOptions((prev) => ({
@@ -283,111 +279,111 @@ const AddListing = () => {
     });
   };
 
- const handleSubmit = async (e) => {
-  e.preventDefault();
+  const handleSubmit = async (e) => {
+    e.preventDefault();
 
-  if (images.length === 0) {
-    alert("Please upload at least one image");
-    return;
-  }
-
-  try {
-    setLoading(true);
-
-    const formDataImages = new FormData();
-    images.forEach((image) => {
-      formDataImages.append("images", image.file);
-    });
-
-    const uploadResponse = await uploadAPI.uploadMultiple(formDataImages);
-    if (!uploadResponse.success) {
-      throw new Error(uploadResponse.message || "Failed to upload images");
+    if (images.length === 0) {
+      alert("Please upload at least one image");
+      return;
     }
 
-    const uploadedImages = uploadResponse.data.images || uploadResponse.data || [];
-    if (uploadedImages.length === 0) {
-      throw new Error("No images were uploaded");
-    }
+    try {
+      setLoading(true);
 
-    const coordinates = getCityCoordinates(formData.location);
-    if (!coordinates) {
-      throw new Error("Invalid city selected");
-    }
+      const formDataImages = new FormData();
+      images.forEach((image) => {
+        formDataImages.append("images", image.file);
+      });
 
-    let response;
+      const uploadResponse = await uploadAPI.uploadMultiple(formDataImages);
+      if (!uploadResponse.success) {
+        throw new Error(uploadResponse.message || "Failed to upload images");
+      }
 
-    if (listingType === "event") {
-      const eventData = {
-        title: formData.title,
-        description: formData.description,
-        category: formData.category.toLowerCase(),
-        venue: formData.title,
-        location: {
-          city: formData.location,
-          address: formData.address || formData.location,
-          geo: {
-            type: "Point",
-            coordinates: [coordinates.lng, coordinates.lat],
+      const uploadedImages = uploadResponse.data.images || uploadResponse.data || [];
+      if (uploadedImages.length === 0) {
+        throw new Error("No images were uploaded");
+      }
+
+      const coordinates = getCityCoordinates(formData.location);
+      if (!coordinates) {
+        throw new Error("Invalid city selected");
+      }
+
+      let response;
+
+      if (listingType === "event") {
+        const eventData = {
+          title: formData.title,
+          description: formData.description,
+          category: formData.category.toLowerCase(),
+          venue: formData.title,
+          location: {
+            city: formData.location,
+            address: formData.address || formData.location,
+            geo: {
+              type: "Point",
+              coordinates: [coordinates.lng, coordinates.lat],
+            },
           },
-        },
-        charges: Number(formData.price),
-        capacity: Number(formData.capacity),
-        images: uploadedImages.map((img) => ({ url: img.url, publicId: img.publicId })),
-        paymentOptions,
-        availableDates,
-      };
-      response = await eventAPI.create(eventData);
+          charges: Number(formData.price),
+          capacity: Number(formData.capacity),
+          images: uploadedImages.map((img) => ({ url: img.url, publicId: img.publicId })),
+          paymentOptions,
+          availableDates,
+        };
+        response = await eventAPI.create(eventData);
 
-    } else if (listingType === "service") {
-      const serviceData = {
-        title: formData.title,
-        description: formData.description,
-        category: formData.category.toLowerCase(),
-        pricing: {
-          basePrice: Number(formData.price),
-          pricingType: "package",
-        },
-        location: {
-          city: formData.location,
-          address: formData.address || formData.location,
-        },
-        images: uploadedImages.map((img) => ({ url: img.url, publicId: img.publicId })),
-        paymentOptions,
-        availableDates,   // ← this was missing from the first (only) service block
-      };
-      response = await serviceAPI.create(serviceData);
+      } else if (listingType === "service") {
+        const serviceData = {
+          title: formData.title,
+          description: formData.description,
+          category: formData.category.toLowerCase(),
+          pricing: {
+            basePrice: Number(formData.price),
+            pricingType: "package",
+          },
+          location: {
+            city: formData.location,
+            address: formData.address || formData.location,
+          },
+          images: uploadedImages.map((img) => ({ url: img.url, publicId: img.publicId })),
+          paymentOptions,
+          availableDates,   // ← this was missing from the first (only) service block
+        };
+        response = await serviceAPI.create(serviceData);
 
-    } else if (listingType === "resource") {
-      const resourceData = {
-        name: formData.title,
-        description: formData.description,
-        category: formData.category.toLowerCase(),
-        rentalPrice: Number(formData.price),
-        quantity: Number(formData.quantity),
-        availableQuantity: Number(formData.quantity),
-        location: {
-          city: formData.location,
-          address: formData.address || formData.location,
-        },
-        images: uploadedImages.map((img) => ({ url: img.url, publicId: img.publicId })),
-        paymentOptions,
-      };
-      response = await resourceAPI.create(resourceData);
+      } else if (listingType === "resource") {
+        const resourceData = {
+          name: formData.title,
+          description: formData.description,
+          category: formData.category.toLowerCase(),
+          rentalPrice: Number(formData.price),
+          quantity: Number(formData.quantity),
+          availableQuantity: Number(formData.quantity),
+          location: {
+            city: formData.location,
+            address: formData.address || formData.location,
+          },
+          images: uploadedImages.map((img) => ({ url: img.url, publicId: img.publicId })),
+          paymentOptions,
+        };
+        response = await resourceAPI.create(resourceData);
+      }
+
+      if (response.success) {
+        alert(`${listingType.charAt(0).toUpperCase() + listingType.slice(1)} listing submitted for admin approval!`);
+        navigate("/provider/dashboard");
+      } else {
+        throw new Error(response.message || "Failed to create listing");
+      }
+    } catch (error) {
+      console.error("Error creating listing:", error);
+      alert(error.message || "Failed to create listing. Please try again.");
+    } finally {
+      setLoading(false);
     }
-
-    if (response.success) {
-      alert(`${listingType.charAt(0).toUpperCase() + listingType.slice(1)} listing submitted for admin approval!`);
-      navigate("/provider/dashboard");
-    } else {
-      throw new Error(response.message || "Failed to create listing");
-    }
-  } catch (error) {
-    console.error("Error creating listing:", error);
-    alert(error.message || "Failed to create listing. Please try again.");
-  } finally {
-    setLoading(false);
-  }
-};
+  };
   const getCategories = () => {
     switch (listingType) {
       case "event": return eventCategories;
@@ -552,7 +548,7 @@ const AddListing = () => {
             )}
 
             {/* Available Dates — event only */}
-           {(listingType === "event" || listingType === "service") && (
+            {(listingType === "event" || listingType === "service") && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -660,8 +656,8 @@ const AddListing = () => {
                               updateTimeSlot(dateIdx, slotIdx, "isAvailable", !slot.isAvailable)
                             }
                             className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${slot.isAvailable
-                                ? "border-green-500 text-green-700 bg-green-50"
-                                : "border-gray-300 text-gray-500 bg-gray-50"
+                              ? "border-green-500 text-green-700 bg-green-50"
+                              : "border-gray-300 text-gray-500 bg-gray-50"
                               }`}
                           >
                             {slot.isAvailable ? "Available" : "Unavailable"}
@@ -834,10 +830,10 @@ const AddListing = () => {
                       onClick={handleStripeToggle}
                       disabled={!canUseStripePayments}
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${!canUseStripePayments
-                          ? "bg-gray-300 opacity-50 cursor-not-allowed"
-                          : paymentOptions.stripe.enabled
-                            ? "bg-green-500"
-                            : "bg-gray-300"
+                        ? "bg-gray-300 opacity-50 cursor-not-allowed"
+                        : paymentOptions.stripe.enabled
+                          ? "bg-green-500"
+                          : "bg-gray-300"
                         }`}
                     >
                       <span
@@ -852,14 +848,12 @@ const AddListing = () => {
                       <label className="block text-xs font-medium text-gray-700 mb-1 uppercase tracking-wide">
                         Currency
                       </label>
+
                       <input
                         type="text"
-                        value={paymentOptions.stripe.currency.toUpperCase()}
-                        onChange={handleStripeCurrencyChange}
-                        disabled={!canUseStripePayments}
-                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D7490C] focus:border-transparent ${!canUseStripePayments ? "bg-gray-100" : ""
-                          }`}
-                        placeholder="USD"
+                        value="PKR"
+                        readOnly
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-100 text-gray-500 cursor-not-allowed"
                       />
                       <p className="text-[11px] text-gray-500 mt-1">
                         Use standard 3-letter currency code. Default is PKR.
@@ -965,8 +959,8 @@ const AddListing = () => {
                                 type="button"
                                 onClick={() => updateManualMethod(index, "isActive", !method.isActive)}
                                 className={`text-xs px-3 py-1 rounded-full border ${method.isActive
-                                    ? "border-green-500 text-green-700 bg-green-50"
-                                    : "border-gray-300 text-gray-600 bg-gray-50"
+                                  ? "border-green-500 text-green-700 bg-green-50"
+                                  : "border-gray-300 text-gray-600 bg-gray-50"
                                   }`}
                               >
                                 {method.isActive ? "Active" : "Inactive"}

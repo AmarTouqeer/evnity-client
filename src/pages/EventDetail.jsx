@@ -39,7 +39,7 @@ const EventDetail = () => {
     try {
       const stored = localStorage.getItem("user");
       if (stored) setCurrentUser(JSON.parse(stored));
-    } catch (_) {}
+    } catch (_) { }
   }, []);
 
   // ── Only customers see the booking sidebar ──
@@ -468,18 +468,49 @@ const EventDetail = () => {
                 </div>
 
                 <form onSubmit={handleBooking} className="space-y-4">
+                  {/* Event Date */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Event Date *
                     </label>
-                    <input
-                      type="date"
-                      value={selectedDate}
-                      onChange={(e) => setSelectedDate(e.target.value)}
-                      min={new Date().toISOString().split("T")[0]}
-                      required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
-                    />
+
+                    {event.availableDates && event.availableDates.length > 0 ? (
+                      // ── Provider has specific dates → show as dropdown ──
+                      <select
+                        value={selectedDate}
+                        onChange={(e) => setSelectedDate(e.target.value)}
+                        required
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
+                      >
+                        <option value="">Select a date</option>
+                        {event.availableDates.map((slot, index) => {
+                          const dateStr = new Date(slot.date).toISOString().split("T")[0];
+                          const isPast = new Date(slot.date) < new Date();
+                          if (isPast) return null; // skip past dates
+                          return (
+                            <option key={index} value={dateStr}>
+                              {new Date(slot.date).toLocaleDateString("en-US", {
+                                weekday: "long",
+                                year: "numeric",
+                                month: "long",
+                                day: "numeric",
+                              })}
+                              {slot.timeSlots?.length ? ` (${slot.timeSlots.length} slots)` : ""}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    ) : (
+                      // ── No specific dates → free date picker ──
+                      <input
+                        type="date"
+                        value={selectedDate}
+                        onChange={(e) => setSelectedDate(e.target.value)}
+                        min={new Date().toISOString().split("T")[0]}
+                        required
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
+                      />
+                    )}
                   </div>
 
                   {selectedDate && availableTimeSlots.length > 0 && (

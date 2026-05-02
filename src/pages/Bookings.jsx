@@ -235,7 +235,20 @@ const Bookings = () => {
       startTime: booking.startTime,
       endTime: booking.endTime,
       location,
-      amount: booking.totalAmount || 0,
+      amount: (() => {
+        // Use stored totalAmount if available and it looks correct
+        if (booking.totalAmount && booking.totalAmount > 0) return booking.totalAmount;
+
+        // Fallback: recalculate from event data
+        const basePrice = booking.event?.charges || booking.service?.charges || 0;
+        const capacity = booking.event?.capacity || 1;
+        const guests = booking.quantity || 1;
+
+        if (capacity > 0 && guests > 0) {
+          return Math.round((basePrice / capacity) * guests);
+        }
+        return basePrice;
+      })(),
       status: booking.status.charAt(0).toUpperCase() + booking.status.slice(1), // Capitalize
       paymentMethod: paymentMethodLabel,
       paymentStatus:
@@ -341,8 +354,8 @@ const Bookings = () => {
                 <button
                   onClick={() => setActiveTab("all")}
                   className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === "all"
-                      ? "bg-[#D7490C] text-white"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    ? "bg-[#D7490C] text-white"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                     }`}
                 >
                   All
@@ -350,8 +363,8 @@ const Bookings = () => {
                 <button
                   onClick={() => setActiveTab("events")}
                   className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === "events"
-                      ? "bg-[#D7490C] text-white"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    ? "bg-[#D7490C] text-white"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                     }`}
                 >
                   Events
@@ -359,8 +372,8 @@ const Bookings = () => {
                 <button
                   onClick={() => setActiveTab("services")}
                   className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === "services"
-                      ? "bg-[#D7490C] text-white"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    ? "bg-[#D7490C] text-white"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                     }`}
                 >
                   Services
@@ -368,8 +381,8 @@ const Bookings = () => {
                 <button
                   onClick={() => setActiveTab("resources")}
                   className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === "resources"
-                      ? "bg-[#D7490C] text-white"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    ? "bg-[#D7490C] text-white"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                     }`}
                 >
                   Resources
