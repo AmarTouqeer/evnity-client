@@ -44,35 +44,54 @@ const ProviderDashboard = () => {
   }, []);
 
   const fetchDashboardData = async () => {
-    try {
-      setLoading(true);
-      const response = await bookingAPI.getProviderDashboardStats();
-      if (response.success) {
-        setStats(response.data.stats);
-        setListings(response.data.listings);
-        const transformedBookings = response.data.recentBookings.map(
-          (booking) => ({
-            id: booking._id,
-            customerName: booking.customer?.name || "Unknown",
-            listing:
-              booking.event?.name ||
-              booking.resource?.name ||
-              booking.service?.name ||
-              "N/A",
-            date: booking.eventDate,
-            amount: booking.totalAmount,
-            status:
-              booking.status.charAt(0).toUpperCase() + booking.status.slice(1),
-          })
-        );
-        setRecentBookings(transformedBookings);
-      }
-    } catch (error) {
-      console.error("Error fetching dashboard data:", error);
-    } finally {
-      setLoading(false);
+  try {
+    setLoading(true);
+    const response = await bookingAPI.getProviderDashboardStats();
+    if (response.success) {
+      const fetchedListings = response.data.listings;
+
+      const ratedListings = fetchedListings.filter(
+        (l) => (l.averageRating ?? l.rating ?? 0) > 0
+      );
+      const avgRating =
+        ratedListings.length > 0
+          ? parseFloat(
+              (
+                ratedListings.reduce(
+                  (sum, l) => sum + (l.averageRating ?? l.rating ?? 0),
+                  0
+                ) / ratedListings.length
+              ).toFixed(1)
+            )
+          : 0;
+
+      setStats({
+        ...response.data.stats,
+        averageRating: avgRating,
+      });
+
+      setListings(fetchedListings);
+
+      const transformedBookings = response.data.recentBookings.map((booking) => ({
+        id: booking._id,
+        customerName: booking.customer?.name || "Unknown",
+        listing:
+          booking.event?.name ||
+          booking.resource?.name ||
+          booking.service?.name ||
+          "N/A",
+        date: booking.eventDate,
+        amount: booking.totalAmount,
+        status: booking.status.charAt(0).toUpperCase() + booking.status.slice(1),
+      }));
+      setRecentBookings(transformedBookings);
     }
-  };
+  } catch (error) {
+    console.error("Error fetching dashboard data:", error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const fetchStripeStatus = async () => {
     try {
@@ -99,7 +118,7 @@ const ProviderDashboard = () => {
       if (!response || response.success === false) {
         throw new Error(
           response?.message ||
-            "Failed to start Stripe Connect onboarding. Please try again."
+          "Failed to start Stripe Connect onboarding. Please try again."
         );
       }
       const url = response.data?.authUrl;
@@ -224,7 +243,7 @@ const ProviderDashboard = () => {
                   <>
                     <p className="text-sm text-gray-700">
                       {stripeStatus?.isConnected &&
-                      stripeStatus?.stripeConnectStatus === "active" ? (
+                        stripeStatus?.stripeConnectStatus === "active" ? (
                         <>
                           Your Stripe account is{" "}
                           <span className="font-semibold text-green-700">
@@ -277,8 +296,8 @@ const ProviderDashboard = () => {
                   ? "Redirecting..."
                   : stripeStatus?.isConnected &&
                     stripeStatus?.stripeConnectStatus === "active"
-                  ? "Manage in Stripe"
-                  : "Connect Stripe"}
+                    ? "Manage in Stripe"
+                    : "Connect Stripe"}
               </button>
             </div>
           </div>
@@ -352,17 +371,16 @@ const ProviderDashboard = () => {
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`py-4 border-b-2 font-medium transition-colors capitalize ${
-                    activeTab === tab
-                      ? "border-[#D7490C] text-[#D7490C]"
-                      : "border-transparent text-gray-600 hover:text-gray-900"
-                  }`}
+                  className={`py-4 border-b-2 font-medium transition-colors capitalize ${activeTab === tab
+                    ? "border-[#D7490C] text-[#D7490C]"
+                    : "border-transparent text-gray-600 hover:text-gray-900"
+                    }`}
                 >
                   {tab === "overview"
                     ? "Overview"
                     : tab === "listings"
-                    ? "My Listings"
-                    : "Bookings"}
+                      ? "My Listings"
+                      : "Bookings"}
                 </button>
               ))}
             </div>
@@ -394,13 +412,12 @@ const ProviderDashboard = () => {
                                 {booking.customerName}
                               </span>
                               <span
-                                className={`text-xs px-2 py-1 rounded-full font-medium ${
-                                  booking.status === "Confirmed"
-                                    ? "bg-green-100 text-green-700"
-                                    : booking.status === "Pending"
+                                className={`text-xs px-2 py-1 rounded-full font-medium ${booking.status === "Confirmed"
+                                  ? "bg-green-100 text-green-700"
+                                  : booking.status === "Pending"
                                     ? "bg-yellow-100 text-yellow-700"
                                     : "bg-red-100 text-red-700"
-                                }`}
+                                  }`}
                               >
                                 {booking.status}
                               </span>
@@ -468,11 +485,10 @@ const ProviderDashboard = () => {
                                 {listing.category}
                               </span>
                               <span
-                                className={`text-xs px-2 py-1 rounded-full font-medium ${
-                                  listing.status === "Active"
-                                    ? "bg-green-100 text-green-700"
-                                    : "bg-gray-100 text-gray-700"
-                                }`}
+                                className={`text-xs px-2 py-1 rounded-full font-medium ${listing.status === "Active"
+                                  ? "bg-green-100 text-green-700"
+                                  : "bg-gray-100 text-gray-700"
+                                  }`}
                               >
                                 {listing.status}
                               </span>
@@ -492,7 +508,7 @@ const ProviderDashboard = () => {
                               </div>
                               <div className="flex items-center">
                                 <Star className="w-4 h-4 mr-1 text-yellow-500 fill-current" />
-                                {listing.rating}
+                                {listing.averageRating ?? listing.rating ?? 0}
                               </div>
                             </div>
                           </div>
@@ -552,13 +568,12 @@ const ProviderDashboard = () => {
                                 {booking.customerName}
                               </span>
                               <span
-                                className={`text-xs px-3 py-1 rounded-full font-medium ${
-                                  booking.status === "Confirmed"
-                                    ? "bg-green-100 text-green-700"
-                                    : booking.status === "Pending"
+                                className={`text-xs px-3 py-1 rounded-full font-medium ${booking.status === "Confirmed"
+                                  ? "bg-green-100 text-green-700"
+                                  : booking.status === "Pending"
                                     ? "bg-yellow-100 text-yellow-700"
                                     : "bg-red-100 text-red-700"
-                                }`}
+                                  }`}
                               >
                                 {booking.status}
                               </span>

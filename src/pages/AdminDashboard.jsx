@@ -498,7 +498,7 @@ export default function AdminDashboard() {
   const serviceActions = makeActions("service");
   const resourceActions = makeActions("resource");
 
-  const TABS = ["overview", "users", "events", "services", "resources", "reviews", "complaints"];
+  const TABS = ["overview", "users", "events", "services", "resources", "reviews",];
 
   /* ── loading ── */
   if (isLoading) {
@@ -768,7 +768,6 @@ export default function AdminDashboard() {
             )}
 
             {/* ── Reviews ── */}
-            {/* ── Reviews ── */}
             {activeTab === "reviews" && (
               <div className="space-y-4">
                 <h2 className="text-lg font-bold text-gray-900">
@@ -875,14 +874,6 @@ export default function AdminDashboard() {
                     })}
                   </div>
                 )}
-              </div>
-            )}
-
-            {/* ── Complaints ── */}
-            {activeTab === "complaints" && (
-              <div className="py-20 text-center text-gray-400">
-                <AlertCircle className="w-14 h-14 mx-auto mb-4 opacity-20" />
-                <p className="text-sm">Complaints module coming soon.</p>
               </div>
             )}
           </div>
