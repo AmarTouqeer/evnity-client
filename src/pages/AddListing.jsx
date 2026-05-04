@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Upload, X, Plus, Check, ChevronDown, MapPin } from "lucide-react";
+import { Upload, X, Plus, Check, MapPin } from "lucide-react";
 import {
   eventAPI,
   serviceAPI,
@@ -8,26 +8,30 @@ import {
   uploadAPI,
   providerStripeAPI,
 } from "../services/api";
-import { getCityCoordinates, getCityNames, pakistanCities } from "../components/CitiesList";
+import VenueLocationPicker from "../components/VenueLocationPicker";
 
 const AddListing = () => {
   const navigate = useNavigate();
   const [listingType, setListingType] = useState("event");
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [citySearch, setCitySearch] = useState("");
-  const [showCityDropdown, setShowCityDropdown] = useState(false);
-  const cityDropdownRef = useRef(null);
   const [stripeStatus, setStripeStatus] = useState(null);
   const [stripeStatusLoading, setStripeStatusLoading] = useState(false);
   const [stripeStatusError, setStripeStatusError] = useState(null);
   const [availableDates, setAvailableDates] = useState([]);
+
+  // ✅ NEW: Holds REAL GPS coordinates pinned on the map
+  const [venueLocation, setVenueLocation] = useState({
+    lat: null,
+    lng: null,
+    address: "",
+    city: "",
+  });
+
   const [formData, setFormData] = useState({
     title: "",
     description: "",
     category: "",
-    location: "",
-    address: "",
     price: "",
     capacity: "",
     amenities: [],
@@ -36,6 +40,7 @@ const AddListing = () => {
     minOrder: "",
     priceUnit: "per day",
   });
+
   const [paymentOptions, setPaymentOptions] = useState({
     stripe: {
       enabled: false,
@@ -47,29 +52,7 @@ const AddListing = () => {
     },
   });
 
-  const cities = getCityNames();
-
-  const filteredCities = citySearch
-    ? pakistanCities.filter(
-      (city) =>
-        city.name.toLowerCase().includes(citySearch.toLowerCase()) ||
-        city.province.toLowerCase().includes(citySearch.toLowerCase())
-    )
-    : pakistanCities;
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (
-        cityDropdownRef.current &&
-        !cityDropdownRef.current.contains(event.target)
-      ) {
-        setShowCityDropdown(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
+  // ── Fetch Stripe Connect status on mount ──
   useEffect(() => {
     const fetchStripeStatus = async () => {
       try {
@@ -100,12 +83,6 @@ const AddListing = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleCitySelect = (cityName) => {
-    setFormData((prev) => ({ ...prev, location: cityName }));
-    setCitySearch("");
-    setShowCityDropdown(false);
-  };
-
   const handleImageUpload = (e) => {
     const files = Array.from(e.target.files);
     const newImages = files.map((file) => ({
@@ -126,10 +103,6 @@ const AddListing = () => {
     }));
   };
 
- const handleStripeCurrencyChange = (_e) => {
-  // Currency is fixed to PKR for this platform
-};
-
   const handleManualToggle = () => {
     setPaymentOptions((prev) => ({
       ...prev,
@@ -142,7 +115,6 @@ const AddListing = () => {
       setStripeStatusLoading(true);
       const response = await providerStripeAPI.getConnectUrl();
 
-      // ✅ If already connected, just refresh stripe status instead
       if (response?.data?.isConnected) {
         const statusResponse = await providerStripeAPI.getStatus();
         if (statusResponse.success) {
@@ -287,6 +259,19 @@ const AddListing = () => {
       return;
     }
 
+    // ✅ Validate venue location was pinned on the map
+    if (!venueLocation.lat || !venueLocation.lng) {
+      alert("Please pin the venue location on the map");
+      return;
+    }
+    if (!venueLocation.city) {
+      alert(
+        "Could not determine the city from the pinned location. " +
+        "Please pick a more specific spot or search for the address."
+      );
+      return;
+    }
+
     try {
       setLoading(true);
 
@@ -305,11 +290,6 @@ const AddListing = () => {
         throw new Error("No images were uploaded");
       }
 
-      const coordinates = getCityCoordinates(formData.location);
-      if (!coordinates) {
-        throw new Error("Invalid city selected");
-      }
-
       let response;
 
       if (listingType === "event") {
@@ -319,11 +299,11 @@ const AddListing = () => {
           category: formData.category.toLowerCase(),
           venue: formData.title,
           location: {
-            city: formData.location,
-            address: formData.address || formData.location,
+            city: venueLocation.city,
+            address: venueLocation.address,
             geo: {
               type: "Point",
-              coordinates: [coordinates.lng, coordinates.lat],
+              coordinates: [venueLocation.lng, venueLocation.lat], // ✅ REAL coords
             },
           },
           charges: Number(formData.price),
@@ -344,12 +324,16 @@ const AddListing = () => {
             pricingType: "package",
           },
           location: {
-            city: formData.location,
-            address: formData.address || formData.location,
+            city: venueLocation.city,
+            address: venueLocation.address,
+            geo: {
+              type: "Point",
+              coordinates: [venueLocation.lng, venueLocation.lat],
+            },
           },
           images: uploadedImages.map((img) => ({ url: img.url, publicId: img.publicId })),
           paymentOptions,
-          availableDates,   // ← this was missing from the first (only) service block
+          availableDates,
         };
         response = await serviceAPI.create(serviceData);
 
@@ -362,8 +346,12 @@ const AddListing = () => {
           quantity: Number(formData.quantity),
           availableQuantity: Number(formData.quantity),
           location: {
-            city: formData.location,
-            address: formData.address || formData.location,
+            city: venueLocation.city,
+            address: venueLocation.address,
+            geo: {
+              type: "Point",
+              coordinates: [venueLocation.lng, venueLocation.lat],
+            },
           },
           images: uploadedImages.map((img) => ({ url: img.url, publicId: img.publicId })),
           paymentOptions,
@@ -384,6 +372,7 @@ const AddListing = () => {
       setLoading(false);
     }
   };
+
   const getCategories = () => {
     switch (listingType) {
       case "event": return eventCategories;
@@ -410,22 +399,19 @@ const AddListing = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <button
               onClick={() => setListingType("event")}
-              className={`p-4 border-2 rounded-lg font-semibold transition-all ${listingType === "event" ? "border-[#D7490C] bg-orange-50 text-[#D7490C]" : "border-gray-300 hover:border-gray-400"
-                }`}
+              className={`p-4 border-2 rounded-lg font-semibold transition-all ${listingType === "event" ? "border-[#D7490C] bg-orange-50 text-[#D7490C]" : "border-gray-300 hover:border-gray-400"}`}
             >
               Event Venue
             </button>
             <button
               onClick={() => setListingType("service")}
-              className={`p-4 border-2 rounded-lg font-semibold transition-all ${listingType === "service" ? "border-[#D7490C] bg-orange-50 text-[#D7490C]" : "border-gray-300 hover:border-gray-400"
-                }`}
+              className={`p-4 border-2 rounded-lg font-semibold transition-all ${listingType === "service" ? "border-[#D7490C] bg-orange-50 text-[#D7490C]" : "border-gray-300 hover:border-gray-400"}`}
             >
               Service
             </button>
             <button
               onClick={() => setListingType("resource")}
-              className={`p-4 border-2 rounded-lg font-semibold transition-all ${listingType === "resource" ? "border-[#D7490C] bg-orange-50 text-[#D7490C]" : "border-gray-300 hover:border-gray-400"
-                }`}
+              className={`p-4 border-2 rounded-lg font-semibold transition-all ${listingType === "resource" ? "border-[#D7490C] bg-orange-50 text-[#D7490C]" : "border-gray-300 hover:border-gray-400"}`}
             >
               Resource
             </button>
@@ -454,100 +440,58 @@ const AddListing = () => {
               />
             </div>
 
-            {/* Category & Location */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Category <span className="text-red-500">*</span>
-                </label>
-                <select
-                  name="category"
-                  value={formData.category}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
-                >
-                  <option value="">Select category</option>
-                  {getCategories().map((cat) => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* City Dropdown */}
-              <div className="relative" ref={cityDropdownRef}>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  City <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={showCityDropdown ? citySearch : formData.location || ""}
-                    onChange={(e) => { setCitySearch(e.target.value); setShowCityDropdown(true); }}
-                    onFocus={() => setShowCityDropdown(true)}
-                    placeholder="Search city..."
-                    required={!formData.location}
-                    className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
-                  />
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-                </div>
-
-                {showCityDropdown && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-                    {filteredCities.length > 0 ? (
-                      filteredCities.map((city) => (
-                        <button
-                          key={city.name}
-                          type="button"
-                          onClick={() => handleCitySelect(city.name)}
-                          className="w-full px-4 py-2 text-left hover:bg-orange-50 hover:text-[#D7490C] transition-colors flex items-start gap-2 border-b border-gray-100 last:border-b-0"
-                        >
-                          <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0 text-gray-400" />
-                          <div className="flex-1">
-                            <div className="font-medium">{city.name}</div>
-                            <div className="text-xs text-gray-500">{city.province}</div>
-                          </div>
-                        </button>
-                      ))
-                    ) : (
-                      <div className="px-4 py-3 text-sm text-gray-500 text-center">
-                        No cities found matching "{citySearch}"
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {formData.location && !showCityDropdown && (
-                  <div className="mt-1 text-xs text-gray-600 flex items-center gap-1">
-                    <MapPin className="w-3 h-3" />
-                    <span>
-                      {formData.location} •{" "}
-                      {pakistanCities.find((c) => c.name === formData.location)?.province}
-                    </span>
-                  </div>
-                )}
-              </div>
+            {/* Category */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Category <span className="text-red-500">*</span>
+              </label>
+              <select
+                name="category"
+                value={formData.category}
+                onChange={handleInputChange}
+                required
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
+              >
+                <option value="">Select category</option>
+                {getCategories().map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
             </div>
 
-            {/* ✅ FIX 1: Full Address — event ONLY */}
-            {listingType === "event" && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Full Address <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  name="address"
-                  value={formData.address}
-                  onChange={handleInputChange}
-                  required
-                  placeholder="e.g., 123 Main Street, Block A, DHA Phase 5"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
-                />
-              </div>
-            )}
+            {/* ✅ Venue Location Picker — replaces city dropdown + address text fields */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Venue Location <span className="text-red-500">*</span>
+              </label>
+              <VenueLocationPicker
+                value={venueLocation}
+                onChange={setVenueLocation}
+              />
+              {!venueLocation.lat && (
+                <p className="text-xs text-red-500 mt-2">
+                  Please pin the exact venue location on the map.
+                </p>
+              )}
+              {venueLocation.lat && venueLocation.address && (
+                <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg text-xs text-gray-700">
+                  <div className="flex items-start gap-2">
+                    <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0 text-green-600" />
+                    <div className="flex-1">
+                      <div className="font-semibold text-green-800 mb-1">Pinned venue:</div>
+                      <div>{venueLocation.address}</div>
+                      {venueLocation.city && (
+                        <div className="text-gray-600 mt-1">
+                          <span className="font-medium">City:</span> {venueLocation.city}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
 
-            {/* Available Dates — event only */}
+            {/* Available Dates — event & service */}
             {(listingType === "event" || listingType === "service") && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -580,7 +524,6 @@ const AddListing = () => {
                     key={dateIdx}
                     className="border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50"
                   >
-                    {/* Date row */}
                     <div className="flex items-center gap-3">
                       <div className="flex-1">
                         <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -604,7 +547,6 @@ const AddListing = () => {
                       </button>
                     </div>
 
-                    {/* Time slots */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <p className="text-xs font-medium text-gray-600">Time Slots</p>
@@ -623,47 +565,36 @@ const AddListing = () => {
                           key={slotIdx}
                           className="flex flex-wrap items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2"
                         >
-                          {/* Start time */}
                           <div className="flex items-center gap-1">
                             <label className="text-[11px] text-gray-500">From</label>
                             <input
                               type="time"
                               value={slot.startTime}
-                              onChange={(e) =>
-                                updateTimeSlot(dateIdx, slotIdx, "startTime", e.target.value)
-                              }
+                              onChange={(e) => updateTimeSlot(dateIdx, slotIdx, "startTime", e.target.value)}
                               className="px-2 py-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-[#D7490C] focus:border-transparent"
                             />
                           </div>
 
-                          {/* End time */}
                           <div className="flex items-center gap-1">
                             <label className="text-[11px] text-gray-500">To</label>
                             <input
                               type="time"
                               value={slot.endTime}
-                              onChange={(e) =>
-                                updateTimeSlot(dateIdx, slotIdx, "endTime", e.target.value)
-                              }
+                              onChange={(e) => updateTimeSlot(dateIdx, slotIdx, "endTime", e.target.value)}
                               className="px-2 py-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-[#D7490C] focus:border-transparent"
                             />
                           </div>
 
-                          {/* Available toggle */}
                           <button
                             type="button"
-                            onClick={() =>
-                              updateTimeSlot(dateIdx, slotIdx, "isAvailable", !slot.isAvailable)
-                            }
+                            onClick={() => updateTimeSlot(dateIdx, slotIdx, "isAvailable", !slot.isAvailable)}
                             className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${slot.isAvailable
                               ? "border-green-500 text-green-700 bg-green-50"
-                              : "border-gray-300 text-gray-500 bg-gray-50"
-                              }`}
+                              : "border-gray-300 text-gray-500 bg-gray-50"}`}
                           >
                             {slot.isAvailable ? "Available" : "Unavailable"}
                           </button>
 
-                          {/* Remove slot */}
                           {entry.timeSlots.length > 1 && (
                             <button
                               type="button"
@@ -697,7 +628,7 @@ const AddListing = () => {
               />
             </div>
 
-            {/* Price */}
+            {/* Price + Capacity/Experience/Quantity */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -804,240 +735,230 @@ const AddListing = () => {
               </div>
             )}
 
-            {/* ✅ FIX 2: Payment Options — ALL listing types */}
-            {(listingType === "event" || listingType === "service" || listingType === "resource") && (
-              <div className="mt-8 space-y-6">
-                <h3 className="text-lg font-bold text-gray-900">Payment Options</h3>
+            {/* Payment Options */}
+            <div className="mt-8 space-y-6">
+              <h3 className="text-lg font-bold text-gray-900">Payment Options</h3>
 
-                {/* Stripe (Connect) */}
-                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-gray-900">Stripe (Card Payments via Connect)</p>
-                      <p className="text-xs text-gray-600 mt-1">
-                        {canUseStripePayments ? (
-                          <>Your Stripe account is connected. Enable card payments for this listing.</>
-                        ) : (
-                          <>Connect your Stripe account to accept card payments on this listing.</>
-                        )}
-                      </p>
-                      {stripeStatusError && (
-                        <p className="text-xs text-red-600 mt-1">{stripeStatusError}</p>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleStripeToggle}
-                      disabled={!canUseStripePayments}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${!canUseStripePayments
-                        ? "bg-gray-300 opacity-50 cursor-not-allowed"
-                        : paymentOptions.stripe.enabled
-                          ? "bg-green-500"
-                          : "bg-gray-300"
-                        }`}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${paymentOptions.stripe.enabled ? "translate-x-6" : "translate-x-1"
-                          }`}
-                      />
-                    </button>
+              {/* Stripe (Connect) */}
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-semibold text-gray-900">Stripe (Card Payments via Connect)</p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      {canUseStripePayments
+                        ? "Your Stripe account is connected. Enable card payments for this listing."
+                        : "Connect your Stripe account to accept card payments on this listing."}
+                    </p>
+                    {stripeStatusError && (
+                      <p className="text-xs text-red-600 mt-1">{stripeStatusError}</p>
+                    )}
                   </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1 uppercase tracking-wide">
-                        Currency
-                      </label>
-
-                      <input
-                        type="text"
-                        value="PKR"
-                        readOnly
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-100 text-gray-500 cursor-not-allowed"
-                      />
-                      <p className="text-[11px] text-gray-500 mt-1">
-                        Use standard 3-letter currency code. Default is PKR.
-                      </p>
-                    </div>
-                    <div className="flex flex-col justify-center text-[11px] text-gray-600">
-                      {stripeStatusLoading ? (
-                        <span>Checking Stripe connection...</span>
-                      ) : canUseStripePayments ? (
-                        <span>Stripe Connect is active. Customers will be redirected to Stripe Checkout to pay.</span>
-                      ) : (
-                        <>
-                          <span className="mb-2">
-                            Stripe card payments are disabled until you connect your Stripe account.
-                          </span>
-                          <button
-                            type="button"
-                            onClick={handleConnectStripe}
-                            disabled={stripeStatusLoading}
-                            className="inline-flex items-center justify-center px-3 py-1.5 rounded-md border border-[#D7490C] text-[#D7490C] text-xs font-semibold hover:bg-orange-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {stripeStatusLoading ? "Opening Stripe..." : "Connect Stripe Account"}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={handleStripeToggle}
+                    disabled={!canUseStripePayments}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${!canUseStripePayments
+                      ? "bg-gray-300 opacity-50 cursor-not-allowed"
+                      : paymentOptions.stripe.enabled
+                        ? "bg-green-500"
+                        : "bg-gray-300"}`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${paymentOptions.stripe.enabled ? "translate-x-6" : "translate-x-1"}`}
+                    />
+                  </button>
                 </div>
 
-                {/* Manual Pakistani methods */}
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-gray-900">Manual Pakistani Payments</p>
-                      <p className="text-xs text-gray-600 mt-1">
-                        Add Easypaisa, JazzCash, bank transfer, or cash instructions.{" "}
-                        <span className="font-semibold">TEST PAYMENT ONLY – no real money moves.</span>
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleManualToggle}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${paymentOptions.manual.enabled ? "bg-green-500" : "bg-gray-300"
-                        }`}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${paymentOptions.manual.enabled ? "translate-x-6" : "translate-x-1"
-                          }`}
-                      />
-                    </button>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1 uppercase tracking-wide">
+                      Currency
+                    </label>
+                    <input
+                      type="text"
+                      value="PKR"
+                      readOnly
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-100 text-gray-500 cursor-not-allowed"
+                    />
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      Use standard 3-letter currency code. Default is PKR.
+                    </p>
                   </div>
-
-                  {paymentOptions.manual.enabled && (
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-center">
-                        <p className="text-sm font-medium text-gray-800">Manual Methods</p>
+                  <div className="flex flex-col justify-center text-[11px] text-gray-600">
+                    {stripeStatusLoading ? (
+                      <span>Checking Stripe connection...</span>
+                    ) : canUseStripePayments ? (
+                      <span>Stripe Connect is active. Customers will be redirected to Stripe Checkout to pay.</span>
+                    ) : (
+                      <>
+                        <span className="mb-2">
+                          Stripe card payments are disabled until you connect your Stripe account.
+                        </span>
                         <button
                           type="button"
-                          onClick={addManualMethod}
-                          className="inline-flex items-center gap-1 text-xs px-3 py-1 rounded-full border border-[#D7490C] text-[#D7490C] hover:bg-orange-50 transition-colors"
+                          onClick={handleConnectStripe}
+                          disabled={stripeStatusLoading}
+                          className="inline-flex items-center justify-center px-3 py-1.5 rounded-md border border-[#D7490C] text-[#D7490C] text-xs font-semibold hover:bg-orange-50 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          <Plus className="w-3 h-3" />
-                          Add Method
+                          {stripeStatusLoading ? "Opening Stripe..." : "Connect Stripe Account"}
                         </button>
-                      </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
 
-                      {paymentOptions.manual.methods.length === 0 && (
-                        <p className="text-xs text-gray-500">
-                          No manual methods added yet. Click <span className="font-semibold">Add Method</span> to configure.
-                        </p>
-                      )}
+              {/* Manual Pakistani methods */}
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-semibold text-gray-900">Manual Pakistani Payments</p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      Add Easypaisa, JazzCash, bank transfer, or cash instructions.{" "}
+                      <span className="font-semibold">TEST PAYMENT ONLY – no real money moves.</span>
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleManualToggle}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${paymentOptions.manual.enabled ? "bg-green-500" : "bg-gray-300"}`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${paymentOptions.manual.enabled ? "translate-x-6" : "translate-x-1"}`}
+                    />
+                  </button>
+                </div>
 
-                      {paymentOptions.manual.methods.map((method, index) => (
-                        <div key={index} className="border border-gray-200 rounded-lg p-3 space-y-3 bg-white">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-3">
-                              <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">Method Type</label>
-                                <select
-                                  value={method.type}
-                                  onChange={(e) => updateManualMethod(index, "type", e.target.value)}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
-                                >
-                                  <option value="easypaisa">Easypaisa</option>
-                                  <option value="jazzcash">JazzCash</option>
-                                  <option value="bank_transfer">Bank Transfer</option>
-                                  <option value="cash">Cash</option>
-                                </select>
-                              </div>
-                              <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">Label (shown to customers)</label>
-                                <input
-                                  type="text"
-                                  value={method.label || ""}
-                                  onChange={(e) => updateManualMethod(index, "label", e.target.value)}
-                                  placeholder="e.g., Easypaisa Wallet"
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
-                                />
-                              </div>
-                            </div>
-                            <div className="flex flex-col items-end gap-2">
-                              <button
-                                type="button"
-                                onClick={() => updateManualMethod(index, "isActive", !method.isActive)}
-                                className={`text-xs px-3 py-1 rounded-full border ${method.isActive
-                                  ? "border-green-500 text-green-700 bg-green-50"
-                                  : "border-gray-300 text-gray-600 bg-gray-50"
-                                  }`}
+                {paymentOptions.manual.enabled && (
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <p className="text-sm font-medium text-gray-800">Manual Methods</p>
+                      <button
+                        type="button"
+                        onClick={addManualMethod}
+                        className="inline-flex items-center gap-1 text-xs px-3 py-1 rounded-full border border-[#D7490C] text-[#D7490C] hover:bg-orange-50 transition-colors"
+                      >
+                        <Plus className="w-3 h-3" />
+                        Add Method
+                      </button>
+                    </div>
+
+                    {paymentOptions.manual.methods.length === 0 && (
+                      <p className="text-xs text-gray-500">
+                        No manual methods added yet. Click <span className="font-semibold">Add Method</span> to configure.
+                      </p>
+                    )}
+
+                    {paymentOptions.manual.methods.map((method, index) => (
+                      <div key={index} className="border border-gray-200 rounded-lg p-3 space-y-3 bg-white">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Method Type</label>
+                              <select
+                                value={method.type}
+                                onChange={(e) => updateManualMethod(index, "type", e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
                               >
-                                {method.isActive ? "Active" : "Inactive"}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => removeManualMethod(index)}
-                                className="p-1 text-red-600 hover:bg-red-50 rounded-full transition-colors"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
+                                <option value="easypaisa">Easypaisa</option>
+                                <option value="jazzcash">JazzCash</option>
+                                <option value="bank_transfer">Bank Transfer</option>
+                                <option value="cash">Cash</option>
+                              </select>
                             </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            {method.type !== "cash" && (
-                              <>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-700 mb-1">Account Title</label>
-                                  <input
-                                    type="text"
-                                    value={method.accountTitle || ""}
-                                    onChange={(e) => updateManualMethod(index, "accountTitle", e.target.value)}
-                                    placeholder="Provider Name"
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-700 mb-1">Account / Wallet Number</label>
-                                  <input
-                                    type="text"
-                                    value={method.accountNumber || ""}
-                                    onChange={(e) => updateManualMethod(index, "accountNumber", e.target.value)}
-                                    placeholder="e.g., 03XXXXXXXXX"
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-700 mb-1">Bank Name</label>
-                                  <input
-                                    type="text"
-                                    value={method.bankName || ""}
-                                    onChange={(e) => updateManualMethod(index, "bankName", e.target.value)}
-                                    placeholder="e.g., HBL, Meezan"
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-700 mb-1">IBAN (optional)</label>
-                                  <input
-                                    type="text"
-                                    value={method.iban || ""}
-                                    onChange={(e) => updateManualMethod(index, "iban", e.target.value)}
-                                    placeholder="PK00XXXX...."
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
-                                  />
-                                </div>
-                              </>
-                            )}
-                            <div className="md:col-span-2">
-                              <label className="block text-xs font-medium text-gray-700 mb-1">Instructions for Customer</label>
-                              <textarea
-                                value={method.instructions || ""}
-                                onChange={(e) => updateManualMethod(index, "instructions", e.target.value)}
-                                rows={3}
-                                placeholder="Explain how to pay and what transaction details to share."
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Label (shown to customers)</label>
+                              <input
+                                type="text"
+                                value={method.label || ""}
+                                onChange={(e) => updateManualMethod(index, "label", e.target.value)}
+                                placeholder="e.g., Easypaisa Wallet"
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
                               />
                             </div>
                           </div>
+                          <div className="flex flex-col items-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => updateManualMethod(index, "isActive", !method.isActive)}
+                              className={`text-xs px-3 py-1 rounded-full border ${method.isActive
+                                ? "border-green-500 text-green-700 bg-green-50"
+                                : "border-gray-300 text-gray-600 bg-gray-50"}`}
+                            >
+                              {method.isActive ? "Active" : "Inactive"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeManualMethod(index)}
+                              className="p-1 text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {method.type !== "cash" && (
+                            <>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Account Title</label>
+                                <input
+                                  type="text"
+                                  value={method.accountTitle || ""}
+                                  onChange={(e) => updateManualMethod(index, "accountTitle", e.target.value)}
+                                  placeholder="Provider Name"
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Account / Wallet Number</label>
+                                <input
+                                  type="text"
+                                  value={method.accountNumber || ""}
+                                  onChange={(e) => updateManualMethod(index, "accountNumber", e.target.value)}
+                                  placeholder="e.g., 03XXXXXXXXX"
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Bank Name</label>
+                                <input
+                                  type="text"
+                                  value={method.bankName || ""}
+                                  onChange={(e) => updateManualMethod(index, "bankName", e.target.value)}
+                                  placeholder="e.g., HBL, Meezan"
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">IBAN (optional)</label>
+                                <input
+                                  type="text"
+                                  value={method.iban || ""}
+                                  onChange={(e) => updateManualMethod(index, "iban", e.target.value)}
+                                  placeholder="PK00XXXX...."
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
+                                />
+                              </div>
+                            </>
+                          )}
+                          <div className="md:col-span-2">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Instructions for Customer</label>
+                            <textarea
+                              value={method.instructions || ""}
+                              onChange={(e) => updateManualMethod(index, "instructions", e.target.value)}
+                              rows={3}
+                              placeholder="Explain how to pay and what transaction details to share."
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
+            </div>
 
             {/* Images Upload */}
             <div>
@@ -1082,6 +1003,7 @@ const AddListing = () => {
                 <div className="text-sm text-blue-800">
                   <p className="font-semibold mb-1">Before submitting:</p>
                   <ul className="list-disc list-inside space-y-1">
+                    <li>Pin your venue's exact location on the map</li>
                     <li>Ensure all information is accurate and complete</li>
                     <li>Upload clear, professional images</li>
                     <li>Admin will review your listing within 24-48 hours</li>

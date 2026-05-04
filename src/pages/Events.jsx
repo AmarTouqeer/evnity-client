@@ -503,7 +503,7 @@ const Events = () => {
             {filters.lat && filters.lng && filters.radius && (
               <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-sm text-blue-800">
-                  <strong>📍 Location Search Active:</strong> Showing events within{" "}
+                  <strong> Location Search Active:</strong> Showing events within{" "}
                   {filters.radius}km of ({filters.lat}, {filters.lng})
                 </p>
               </div>
