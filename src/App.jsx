@@ -23,7 +23,6 @@ import EventDetail from "./pages/EventDetail";
 import ServiceDetail from "./pages/ServiceDetail";
 import ResourceDetail from "./pages/ResourceDetail";
 import Bookings from "./pages/Bookings";
-import Complaints from "./pages/Complaints";
 import UploadReceipt from "./pages/UploadReceipt";
 import Notifications from "./pages/Notifications";
 import AddListing from "./pages/AddListing";
@@ -147,14 +146,6 @@ function App() {
             element={
               <ProtectedRoute>
                 <UploadReceipt />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="complaints"
-            element={
-              <ProtectedRoute>
-                <Complaints />
               </ProtectedRoute>
             }
           />
