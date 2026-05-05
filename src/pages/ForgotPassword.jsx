@@ -194,7 +194,7 @@ const ForgotPassword = () => {
           <div className="mt-6 pt-6 border-t border-gray-200">
             <div className="bg-gray-50 rounded-lg p-4">
               <h4 className="text-sm font-semibold text-gray-900 mb-2">
-                💡 Helpful Tips
+                 Helpful Tips
               </h4>
               <ul className="text-xs text-gray-600 space-y-1">
                 <li>

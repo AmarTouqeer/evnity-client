@@ -22,7 +22,6 @@ const ResetPassword = () => {
       ...prev,
       [name]: value,
     }));
-    // Clear specific field error
     if (errors[name]) {
       setErrors((prev) => ({
         ...prev,
@@ -37,11 +36,15 @@ const ResetPassword = () => {
 
     if (!formData.password) {
       newErrors.password = "Password is required";
-    } else if (formData.password.length < 6) {
-      newErrors.password = "Password must be at least 6 characters";
-    } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.password)) {
+    } else if (formData.password.length < 8) {
+      newErrors.password = "Password must be at least 8 characters";
+    } else if (
+      !/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z0-9])/.test(
+        formData.password
+      )
+    ) {
       newErrors.password =
-        "Password must contain uppercase, lowercase, and number";
+        "Password must contain uppercase, lowercase, number, and special character";
     }
 
     if (!formData.confirmPassword) {
@@ -59,9 +62,9 @@ const ResetPassword = () => {
     if (!password) return { strength: 0, label: "", color: "" };
 
     let strength = 0;
-    if (password.length >= 6) strength++;
     if (password.length >= 8) strength++;
-    if (/[a-z]/.test(password) && /[A-Z]/.test(password)) strength++;
+    if (/[A-Z]/.test(password)) strength++;
+    if (/[a-z]/.test(password)) strength++;
     if (/\d/.test(password)) strength++;
     if (/[^a-zA-Z0-9]/.test(password)) strength++;
 
@@ -103,7 +106,6 @@ const ResetPassword = () => {
 
       if (data.success) {
         setIsSuccess(true);
-        // Redirect to login after 3 seconds
         setTimeout(() => {
           navigate("/login");
         }, 3000);
@@ -168,7 +170,6 @@ const ResetPassword = () => {
 
         {/* Form */}
         <div className="bg-white py-8 px-6 shadow-xl rounded-2xl border border-gray-100">
-          {/* General Error */}
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-6">
               <p className="text-sm">{error}</p>
@@ -211,6 +212,8 @@ const ResetPassword = () => {
                   )}
                 </button>
               </div>
+
+              {/* Password Strength Bar */}
               {formData.password && passwordStrength.strength > 0 && (
                 <div className="mt-2">
                   <div className="flex items-center justify-between mb-1">
@@ -219,7 +222,7 @@ const ResetPassword = () => {
                     </span>
                     <span
                       className={`text-xs font-medium ${
-                        passwordStrength.strength >= 3
+                        passwordStrength.strength >= 4
                           ? "text-green-600"
                           : "text-orange-600"
                       }`}
@@ -237,6 +240,7 @@ const ResetPassword = () => {
                   </div>
                 </div>
               )}
+
               {errors.password && (
                 <p className="mt-2 text-sm text-red-600 flex items-center">
                   <XCircle className="w-4 h-4 mr-1" />
@@ -306,14 +310,14 @@ const ResetPassword = () => {
                 <li className="flex items-center">
                   <span
                     className={
-                      formData.password.length >= 6
+                      formData.password.length >= 8
                         ? "text-green-600"
                         : "text-gray-400"
                     }
                   >
-                    {formData.password.length >= 6 ? "✓" : "○"}
+                    {formData.password.length >= 8 ? "✓" : "○"}
                   </span>
-                  <span className="ml-2">At least 6 characters</span>
+                  <span className="ml-2">At least 8 characters</span>
                 </li>
                 <li className="flex items-center">
                   <span
@@ -350,6 +354,19 @@ const ResetPassword = () => {
                     {/\d/.test(formData.password) ? "✓" : "○"}
                   </span>
                   <span className="ml-2">One number</span>
+                </li>
+                {/* ✅ NEW: Special character requirement */}
+                <li className="flex items-center">
+                  <span
+                    className={
+                      /[^a-zA-Z0-9]/.test(formData.password)
+                        ? "text-green-600"
+                        : "text-gray-400"
+                    }
+                  >
+                    {/[^a-zA-Z0-9]/.test(formData.password) ? "✓" : "○"}
+                  </span>
+                  <span className="ml-2">One special character (!@#$%^&*...)</span>
                 </li>
               </ul>
             </div>
