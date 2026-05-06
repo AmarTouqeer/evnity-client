@@ -15,9 +15,11 @@ import {
   ChevronDown,
   X,
   Loader2,
+  Navigation,
 } from "lucide-react";
 import { resourceAPI } from "../services/api";
-import { pakistanCities } from "../components/CitiesList";
+import { pakistanCities, getCityCoordinates } from "../components/CitiesList";
+import { haversineDistanceKm, getListingCoords } from "../utils/distance";
 
 // Match categories providers actually submit (from AddListing.jsx)
 const RESOURCE_CATEGORIES = [
@@ -39,6 +41,9 @@ const DEFAULT_FILTERS = {
   minPrice: "",
   maxPrice: "",
   availability: "",
+  lat: "",
+  lng: "",
+  radius: "",
 };
 
 const Resources = () => {
@@ -52,6 +57,7 @@ const Resources = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [sortBy, setSortBy] = useState("-createdAt");
+  const [gettingLocation, setGettingLocation] = useState(false);
 
   // City searchable dropdown
   const [citySearch, setCitySearch] = useState("");
@@ -98,6 +104,9 @@ const Resources = () => {
         minPrice: filters.minPrice,
         maxPrice: filters.maxPrice,
         availability: filters.availability,
+        lat: filters.lat,
+        lng: filters.lng,
+        radius: filters.radius,
         page,
         sortBy,
       }),
@@ -108,6 +117,9 @@ const Resources = () => {
       filters.minPrice,
       filters.maxPrice,
       filters.availability,
+      filters.lat,
+      filters.lng,
+      filters.radius,
       page,
       sortBy,
     ]
@@ -130,14 +142,42 @@ const Resources = () => {
       if (filters.minPrice)      params.minPrice     = filters.minPrice;
       if (filters.maxPrice)      params.maxPrice     = filters.maxPrice;
       if (filters.availability)  params.availability = filters.availability;
+      if (filters.lat)           params.lat          = filters.lat;
+      if (filters.lng)           params.lng          = filters.lng;
+      if (filters.radius)        params.radius       = filters.radius;
+
+      if (filters.radius && (!params.lat || !params.lng) && filters.city) {
+        const cityCoords = getCityCoordinates(filters.city);
+        if (cityCoords) {
+          params.lat = cityCoords.lat.toString();
+          params.lng = cityCoords.lng.toString();
+        }
+      }
 
       const response = await resourceAPI.getAll(params);
 
       if (response.success) {
         const list = response.data?.resources || [];
-        setResources(list);
+        let filteredResources = list;
+        if (params.lat && params.lng && params.radius) {
+          const centerLat = Number(params.lat);
+          const centerLng = Number(params.lng);
+          const radiusKm = Number(params.radius);
+          filteredResources = list.filter((resource) => {
+            const point = getListingCoords(resource);
+            if (!point) return false;
+            const distanceKm = haversineDistanceKm(
+              centerLat,
+              centerLng,
+              point.lat,
+              point.lng
+            );
+            return distanceKm < radiusKm;
+          });
+        }
+        setResources(filteredResources);
         setTotalPages(response.data?.totalPages || 1);
-        setTotal(response.data?.total || list.length);
+        setTotal(filteredResources.length);
       } else {
         setError(response.message || "Failed to load resources");
       }
@@ -170,6 +210,36 @@ const Resources = () => {
 
   const handleCategoryClick = (categoryValue) => {
     setFilters((prev) => ({ ...prev, category: categoryValue }));
+    setPage(1);
+  };
+
+  const getUserLocation = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser");
+      return;
+    }
+    setGettingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setFilters((prev) => ({
+          ...prev,
+          lat: position.coords.latitude.toString(),
+          lng: position.coords.longitude.toString(),
+          radius: prev.radius || "10",
+        }));
+        setGettingLocation(false);
+        setPage(1);
+      },
+      (err) => {
+        console.error("Error getting location:", err);
+        alert("Unable to get your location. Please enter manually.");
+        setGettingLocation(false);
+      }
+    );
+  };
+
+  const clearGeoFilters = () => {
+    setFilters((prev) => ({ ...prev, lat: "", lng: "", radius: "" }));
     setPage(1);
   };
 
@@ -410,16 +480,62 @@ const Resources = () => {
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Radius (km)
+                </label>
+                <input
+                  type="number"
+                  name="radius"
+                  value={filters.radius}
+                  onChange={handleFilterChange}
+                  placeholder="e.g. 10"
+                  min="1"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
+                />
+              </div>
             </div>
 
-            {activeFilterCount > 0 && (
-              <div className="mt-4 flex">
+            <div className="mt-4 flex gap-3 flex-wrap">
+              <button
+                onClick={getUserLocation}
+                disabled={gettingLocation}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {gettingLocation ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Navigation className="h-4 w-4" />
+                )}
+                {gettingLocation ? "Getting Location..." : "Use My Location"}
+              </button>
+
+              {(filters.lat || filters.lng || filters.radius) && (
+                <button
+                  onClick={clearGeoFilters}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Clear Location
+                </button>
+              )}
+
+              {activeFilterCount > 0 && (
                 <button
                   onClick={resetAllFilters}
                   className="ml-auto px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
                 >
                   Reset All Filters
                 </button>
+              )}
+            </div>
+
+            {filters.lat && filters.lng && filters.radius && (
+              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>📍 Location Search Active:</strong> Showing resources within{" "}
+                  {filters.radius}km of ({parseFloat(filters.lat).toFixed(4)},{" "}
+                  {parseFloat(filters.lng).toFixed(4)})
+                </p>
               </div>
             )}
           </div>
@@ -440,6 +556,11 @@ const Resources = () => {
                   {" "}
                   in <span className="font-semibold">{filters.city}</span>
                 </>
+              )}
+              {filters.lat && filters.lng && filters.radius && (
+                <span className="ml-1 text-blue-700 font-medium">
+                  · within {filters.radius}km
+                </span>
               )}
             </>
           )}
