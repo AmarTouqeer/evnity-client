@@ -14,22 +14,24 @@ import {
   ChevronDown,
   X,
   Loader2,
+  Navigation,
 } from "lucide-react";
 import { serviceAPI } from "../services/api";
-import { pakistanCities } from "../components/CitiesList";
+import { pakistanCities, getCityCoordinates } from "../components/CitiesList";
+import { haversineDistanceKm, getListingCoords } from "../utils/distance";
 
 // Match the categories providers actually submit (from AddListing.jsx)
 const SERVICE_CATEGORIES = [
-  { label: "All Services", value: "",            icon: null },
-  { label: "Photography",  value: "photography", icon: Camera },
-  { label: "Videography",  value: "videography", icon: Camera },
-  { label: "Catering",     value: "catering",    icon: Utensils },
-  { label: "DJ",           value: "dj",          icon: Music },
-  { label: "Entertainment",value: "entertainment",icon: Music },
-  { label: "Planning",     value: "planning",    icon: Users },
-  { label: "Decorator",    value: "decorator",   icon: Palette },
-  { label: "Makeup",       value: "makeup",      icon: Sparkles },
-  { label: "Other",        value: "other",       icon: Sparkles },
+  { label: "All Services",  value: "",             icon: null },
+  { label: "Photography",   value: "photography",  icon: Camera },
+  { label: "Videography",   value: "videography",  icon: Camera },
+  { label: "Catering",      value: "catering",     icon: Utensils },
+  { label: "DJ",            value: "dj",           icon: Music },
+  { label: "Entertainment", value: "entertainment", icon: Music },
+  { label: "Planning",      value: "planning",     icon: Users },
+  { label: "Decorator",     value: "decorator",    icon: Palette },
+  { label: "Makeup",        value: "makeup",       icon: Sparkles },
+  { label: "Other",         value: "other",        icon: Sparkles },
 ];
 
 const DEFAULT_FILTERS = {
@@ -39,6 +41,9 @@ const DEFAULT_FILTERS = {
   minPrice: "",
   maxPrice: "",
   minRating: "",
+  lat: "",
+  lng: "",
+  radius: "",
 };
 
 const Services = () => {
@@ -52,6 +57,7 @@ const Services = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [sortBy, setSortBy] = useState("-createdAt");
+  const [gettingLocation, setGettingLocation] = useState(false);
 
   // City searchable dropdown
   const [citySearch, setCitySearch] = useState("");
@@ -98,6 +104,9 @@ const Services = () => {
         minPrice: filters.minPrice,
         maxPrice: filters.maxPrice,
         minRating: filters.minRating,
+        lat: filters.lat,
+        lng: filters.lng,
+        radius: filters.radius,
         page,
         sortBy,
       }),
@@ -108,6 +117,9 @@ const Services = () => {
       filters.minPrice,
       filters.maxPrice,
       filters.minRating,
+      filters.lat,
+      filters.lng,
+      filters.radius,
       page,
       sortBy,
     ]
@@ -124,19 +136,54 @@ const Services = () => {
     try {
       const params = { page, limit: 12, sort: sortBy };
 
-      if (debouncedSearch)    params.search    = debouncedSearch;
-      if (filters.category)   params.category  = filters.category;
-      if (filters.city)       params.city      = filters.city;
-      if (filters.minPrice)   params.minPrice  = filters.minPrice;
-      if (filters.maxPrice)   params.maxPrice  = filters.maxPrice;
-      if (filters.minRating)  params.minRating = filters.minRating;
+      if (debouncedSearch)   params.search    = debouncedSearch;
+      if (filters.category)  params.category  = filters.category;
+      if (filters.city)      params.city      = filters.city;
+      if (filters.minPrice)  params.minPrice  = filters.minPrice;
+      if (filters.maxPrice)  params.maxPrice  = filters.maxPrice;
+      if (filters.minRating) params.minRating = filters.minRating;
+      if (filters.lat)       params.lat       = filters.lat;
+      if (filters.lng)       params.lng       = filters.lng;
+      if (filters.radius)    params.radius    = filters.radius;
+
+      if (filters.radius && (!params.lat || !params.lng) && filters.city) {
+        const cityCoords = getCityCoordinates(filters.city);
+        if (cityCoords) {
+          params.lat = cityCoords.lat.toString();
+          params.lng = cityCoords.lng.toString();
+        }
+      }
 
       const response = await serviceAPI.getAll(params);
 
       if (response.success) {
-        setServices(response.data.services || []);
+        const fetchedServices = response.data.services || [];
+        let filteredServices = fetchedServices;
+
+        if (params.lat && params.lng && params.radius) {
+          const centerLat = Number(params.lat);
+          const centerLng = Number(params.lng);
+          const radiusKm = Number(params.radius);
+          filteredServices = fetchedServices.filter((service) => {
+            const point = getListingCoords(service);
+            if (!point) return false;
+            const distanceKm = haversineDistanceKm(
+              centerLat,
+              centerLng,
+              point.lat,
+              point.lng
+            );
+            return distanceKm < radiusKm;
+          });
+        }
+
+        setServices(filteredServices);
         setTotalPages(response.data.totalPages || 1);
-        setTotal(response.data.total || 0);
+        setTotal(
+          params.lat && params.lng && params.radius
+            ? filteredServices.length
+            : response.data.total || 0
+        );
       } else {
         setError(response.message || "Failed to load services");
       }
@@ -169,6 +216,37 @@ const Services = () => {
 
   const handleCategoryClick = (categoryValue) => {
     setFilters((prev) => ({ ...prev, category: categoryValue }));
+    setPage(1);
+  };
+
+  // ── Geolocation helpers ──
+  const getUserLocation = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser");
+      return;
+    }
+    setGettingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setFilters((prev) => ({
+          ...prev,
+          lat: position.coords.latitude.toString(),
+          lng: position.coords.longitude.toString(),
+          radius: prev.radius || "10",
+        }));
+        setGettingLocation(false);
+        setPage(1);
+      },
+      (err) => {
+        console.error("Error getting location:", err);
+        alert("Unable to get your location. Please enter manually.");
+        setGettingLocation(false);
+      }
+    );
+  };
+
+  const clearGeoFilters = () => {
+    setFilters((prev) => ({ ...prev, lat: "", lng: "", radius: "" }));
     setPage(1);
   };
 
@@ -384,16 +462,66 @@ const Services = () => {
                   <option value="3.0">3.0+ Stars</option>
                 </select>
               </div>
+
+              {/* ── Radius filter ── */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Radius (km)
+                </label>
+                <input
+                  type="number"
+                  name="radius"
+                  value={filters.radius}
+                  onChange={handleFilterChange}
+                  placeholder="e.g. 10"
+                  min="1"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
+                />
+              </div>
             </div>
 
-            {activeFilterCount > 0 && (
-              <div className="mt-4 flex">
+            {/* ── Location helper buttons ── */}
+            <div className="mt-4 flex gap-3 flex-wrap">
+              <button
+                onClick={getUserLocation}
+                disabled={gettingLocation}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {gettingLocation ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Navigation className="h-4 w-4" />
+                )}
+                {gettingLocation ? "Getting Location..." : "Use My Location"}
+              </button>
+
+              {(filters.lat || filters.lng || filters.radius) && (
+                <button
+                  onClick={clearGeoFilters}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Clear Location
+                </button>
+              )}
+
+              {activeFilterCount > 0 && (
                 <button
                   onClick={resetAllFilters}
-                  className="ml-auto px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                  className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors ml-auto"
                 >
                   Reset All Filters
                 </button>
+              )}
+            </div>
+
+            {/* ── Active location indicator ── */}
+            {filters.lat && filters.lng && filters.radius && (
+              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>📍 Location Search Active:</strong> Showing services within{" "}
+                  {filters.radius}km of ({parseFloat(filters.lat).toFixed(4)},{" "}
+                  {parseFloat(filters.lng).toFixed(4)})
+                </p>
               </div>
             )}
           </div>
@@ -414,6 +542,11 @@ const Services = () => {
                   {" "}
                   in <span className="font-semibold">{filters.city}</span>
                 </>
+              )}
+              {filters.lat && filters.lng && filters.radius && (
+                <span className="ml-1 text-blue-700 font-medium">
+                  · within {filters.radius}km
+                </span>
               )}
             </>
           )}
@@ -474,7 +607,7 @@ const Services = () => {
             ))}
           </div>
 
-          {/* Real pagination */}
+          {/* Pagination */}
           {totalPages > 1 && (
             <div className="mt-12 flex justify-center gap-2 flex-wrap">
               <button
