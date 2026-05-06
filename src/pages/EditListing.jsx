@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Upload, X, Loader2, Plus, Trash2, ChevronDown, MapPin } from "lucide-react";
+import { Upload, X, Loader2, Plus, Trash2 } from "lucide-react";
 import {
   eventAPI,
   serviceAPI,
@@ -8,11 +8,7 @@ import {
   uploadAPI,
   providerStripeAPI,
 } from "../services/api";
-import {
-  getCityCoordinates,
-  getCityNames,
-  pakistanCities,
-} from "../components/CitiesList";
+import VenueLocationPicker from "../components/VenueLocationPicker";
 
 const EditListing = () => {
   const navigate = useNavigate();
@@ -33,6 +29,12 @@ const EditListing = () => {
     capacity: "",
     quantity: "",
   });
+  const [venueLocation, setVenueLocation] = useState({
+    lat: null,
+    lng: null,
+    address: "",
+    city: "",
+  });
 
   const [availableDates, setAvailableDates] = useState([]);
 
@@ -44,38 +46,6 @@ const EditListing = () => {
   const [stripeStatus, setStripeStatus] = useState(null);
   const [stripeStatusLoading, setStripeStatusLoading] = useState(false);
   const [stripeStatusError, setStripeStatusError] = useState(null);
-
-  // ── City dropdown state (matches AddListing) ────────────────────────────
-  const [citySearch, setCitySearch] = useState("");
-  const [showCityDropdown, setShowCityDropdown] = useState(false);
-  const cityDropdownRef = useRef(null);
-
-  const filteredCities = citySearch
-    ? pakistanCities.filter(
-        (city) =>
-          city.name.toLowerCase().includes(citySearch.toLowerCase()) ||
-          city.province.toLowerCase().includes(citySearch.toLowerCase())
-      )
-    : pakistanCities;
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (
-        cityDropdownRef.current &&
-        !cityDropdownRef.current.contains(event.target)
-      ) {
-        setShowCityDropdown(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleCitySelect = (cityName) => {
-    setFormData((prev) => ({ ...prev, location: cityName }));
-    setCitySearch("");
-    setShowCityDropdown(false);
-  };
 
   // ── Categories ──────────────────────────────────────────────────────────
   const eventCategories = [
@@ -178,6 +148,14 @@ const EditListing = () => {
             quantity:    data.quantity || "",
           });
         }
+
+        const coords = data.location?.geo?.coordinates;
+        setVenueLocation({
+          lat: Array.isArray(coords) && coords.length === 2 ? Number(coords[1]) : null,
+          lng: Array.isArray(coords) && coords.length === 2 ? Number(coords[0]) : null,
+          address: data.location?.address || "",
+          city: data.location?.city || "",
+        });
 
         setPaymentOptions({
           stripe: {
@@ -338,10 +316,12 @@ const EditListing = () => {
       return;
     }
 
-    // ✅ FIX: resolve coordinates from city just like AddListing
-    const coordinates = getCityCoordinates(formData.location);
-    if (!coordinates) {
-      alert("Please select a valid city from the list.");
+    if (!venueLocation.lat || !venueLocation.lng) {
+      alert("Please pin the listing location on the map.");
+      return;
+    }
+    if (!venueLocation.city) {
+      alert("Could not determine city from pinned location. Please pick a precise spot.");
       return;
     }
 
@@ -374,11 +354,11 @@ const EditListing = () => {
           category:    formData.category.toLowerCase(),
           venue:       formData.venue,
           location: {
-            city:    formData.location,
-            address: formData.address || formData.location,
-            geo: {                                            // ✅ FIX
+            city: venueLocation.city,
+            address: venueLocation.address || formData.address || formData.location,
+            geo: {
               type: "Point",
-              coordinates: [coordinates.lng, coordinates.lat],
+              coordinates: [venueLocation.lng, venueLocation.lat],
             },
           },
           charges:  Number(formData.price),
@@ -405,11 +385,11 @@ const EditListing = () => {
             pricingType: "package",
           },
           location: {
-            city:    formData.location,
-            address: formData.address || formData.location,
-            geo: {                                            // ✅ FIX (send for consistency)
+            city: venueLocation.city,
+            address: venueLocation.address || formData.address || formData.location,
+            geo: {
               type: "Point",
-              coordinates: [coordinates.lng, coordinates.lat],
+              coordinates: [venueLocation.lng, venueLocation.lat],
             },
           },
           images: uploadedImages,
@@ -425,11 +405,11 @@ const EditListing = () => {
           quantity:          Number(formData.quantity),
           availableQuantity: Number(formData.quantity),
           location: {
-            city:    formData.location,
-            address: formData.address || formData.location,
-            geo: {                                            // ✅ FIX (send for consistency)
+            city: venueLocation.city,
+            address: venueLocation.address || formData.address || formData.location,
+            geo: {
               type: "Point",
-              coordinates: [coordinates.lng, coordinates.lat],
+              coordinates: [venueLocation.lng, venueLocation.lat],
             },
           },
           images: uploadedImages,
@@ -524,7 +504,6 @@ const EditListing = () => {
                 </div>
               )}
 
-              {/* Category + City (searchable dropdown like AddListing) */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Category *</label>
@@ -546,76 +525,21 @@ const EditListing = () => {
                     ))}
                   </select>
                 </div>
-
-                {/* ✅ FIX: searchable city dropdown (identical behavior to AddListing) */}
-                <div className="relative" ref={cityDropdownRef}>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    City <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={showCityDropdown ? citySearch : formData.location || ""}
-                      onChange={(e) => {
-                        setCitySearch(e.target.value);
-                        setShowCityDropdown(true);
-                      }}
-                      onFocus={() => setShowCityDropdown(true)}
-                      placeholder="Search city..."
-                      required={!formData.location}
-                      className="w-full px-4 py-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
-                    />
-                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-                  </div>
-
-                  {showCityDropdown && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-                      {filteredCities.length > 0 ? (
-                        filteredCities.map((city) => (
-                          <button
-                            key={city.name}
-                            type="button"
-                            onClick={() => handleCitySelect(city.name)}
-                            className="w-full px-4 py-2 text-left hover:bg-orange-50 hover:text-[#D7490C] transition-colors flex items-start gap-2 border-b border-gray-100 last:border-b-0"
-                          >
-                            <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0 text-gray-400" />
-                            <div className="flex-1">
-                              <div className="font-medium">{city.name}</div>
-                              <div className="text-xs text-gray-500">{city.province}</div>
-                            </div>
-                          </button>
-                        ))
-                      ) : (
-                        <div className="px-4 py-3 text-sm text-gray-500 text-center">
-                          No cities found matching "{citySearch}"
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {formData.location && !showCityDropdown && (
-                    <div className="mt-1 text-xs text-gray-600 flex items-center gap-1">
-                      <MapPin className="w-3 h-3" />
-                      <span>
-                        {formData.location} •{" "}
-                        {pakistanCities.find((c) => c.name === formData.location)?.province}
-                      </span>
-                    </div>
-                  )}
-                </div>
               </div>
 
-              {/* Address */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Full Address</label>
-                <input
-                  type="text"
-                  name="address"
-                  value={formData.address}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#D7490C] focus:border-transparent"
-                  placeholder="Street address, area, landmark..."
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Location <span className="text-red-500">*</span>
+                </label>
+                <VenueLocationPicker
+                  value={venueLocation}
+                  onChange={setVenueLocation}
                 />
+                {!venueLocation.lat && (
+                  <p className="text-xs text-red-500 mt-2">
+                    Please pin the exact location on the map.
+                  </p>
+                )}
               </div>
 
               {/* Price + Capacity / Quantity */}
