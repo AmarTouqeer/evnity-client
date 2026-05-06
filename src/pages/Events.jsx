@@ -14,7 +14,8 @@ import {
   X,
 } from "lucide-react";
 import { eventAPI } from "../services/api";
-import { pakistanCities } from "../components/CitiesList";
+import { pakistanCities, getCityCoordinates } from "../components/CitiesList";
+import { haversineDistanceKm, getListingCoords } from "../utils/distance";
 
 const EVENT_CATEGORIES = [
   "Wedding",
@@ -162,10 +163,38 @@ const Events = () => {
       if (filters.lng) params.lng = filters.lng;
       if (filters.radius) params.radius = filters.radius;
 
+      if (filters.radius && (!params.lat || !params.lng) && filters.city) {
+        const cityCoords = getCityCoordinates(filters.city);
+        if (cityCoords) {
+          params.lat = cityCoords.lat.toString();
+          params.lng = cityCoords.lng.toString();
+        }
+      }
+
       const response = await eventAPI.getAll(params);
 
       if (response.success) {
-        setEvents(response.data.events || response.data || []);
+        const fetchedEvents = response.data.events || response.data || [];
+        let filteredEvents = fetchedEvents;
+
+        if (params.lat && params.lng && params.radius) {
+          const centerLat = Number(params.lat);
+          const centerLng = Number(params.lng);
+          const radiusKm = Number(params.radius);
+          filteredEvents = fetchedEvents.filter((event) => {
+            const point = getListingCoords(event);
+            if (!point) return false;
+            const distanceKm = haversineDistanceKm(
+              centerLat,
+              centerLng,
+              point.lat,
+              point.lng
+            );
+            return distanceKm < radiusKm;
+          });
+        }
+
+        setEvents(filteredEvents);
         setTotalPages(response.data.totalPages || response.pages || 1);
       } else {
         setError(response.message || "Failed to fetch events");
