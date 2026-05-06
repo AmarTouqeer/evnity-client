@@ -14,6 +14,7 @@ import {
   Star,
   Trash2,
   ShieldOff,
+  Eye,
 } from "lucide-react";
 import { paymentAPI } from "../services/api";
 import DataTable from "../components/DataTable";
@@ -493,6 +494,13 @@ export default function AdminDashboard() {
     },
   ];
 
+  const viewAction = (type) => ({
+    label: "View",
+    color: "blue",
+    icon: <Eye className="w-3.5 h-3.5" />,
+    onClick: (r) => navigate(`/${type}s/${r._id}`),
+  });
+
   const userActions = makeActions("user", "_status");
   const eventActions = makeActions("event");
   const serviceActions = makeActions("service");
@@ -685,6 +693,7 @@ export default function AdminDashboard() {
                   columns={eventColumns}
                   data={byStatus(allEvents, eventFilter)}
                   actions={[
+                    viewAction("event"),
                     ...eventActions,
                     {
                       label: "Delete",
@@ -716,6 +725,7 @@ export default function AdminDashboard() {
                   columns={serviceColumns}
                   data={byStatus(allServices, serviceFilter)}
                   actions={[
+                    viewAction("service"),
                     ...serviceActions,
                     {
                       label: "Delete",
@@ -747,6 +757,7 @@ export default function AdminDashboard() {
                   columns={resourceColumns}
                   data={byStatus(allResources, resourceFilter)}
                   actions={[
+                    viewAction("resource"),
                     ...resourceActions,
                     {
                       label: "Delete",
