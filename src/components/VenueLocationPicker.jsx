@@ -239,7 +239,7 @@ const VenueLocationPicker = ({ value, onChange }) => {
       </div>
 
       <p className="text-xs text-gray-500">
-        💡 Search above, click on the map, or use your current location to pin the exact venue spot.
+         Search above, click on the map, or use your current location to pin the exact venue spot.
       </p>
     </div>
   );
